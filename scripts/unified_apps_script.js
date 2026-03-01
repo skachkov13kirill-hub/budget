@@ -212,6 +212,7 @@ function matchBranchCode(text) {
   if (t.indexOf('менд') >= 0 && t.indexOf('16') >= 0) return 'М16';
   if (t.indexOf('пет') >= 0 && t.indexOf('14') >= 0) return 'П14';
   if (t.indexOf('арс') >= 0 && t.indexOf('6') >= 0) return 'А6';
+  if (t.indexOf('граф') >= 0 && t.indexOf('11') >= 0) return 'Г11';
   if (t.indexOf('граф') >= 0 && t.indexOf('4') >= 0) return 'Г4';
   if (t.indexOf('вор') >= 0 && t.indexOf('22') >= 0) return 'В22';
   if (t.indexOf('вор') >= 0 && t.indexOf('20') >= 0) return 'В20';
@@ -312,9 +313,10 @@ function handleGetBranches(e) {
   var filialNames = [
     'Менделеева 16', 'Воронцовский 8', 'Петровский 14',
     'Арсенальная 6', 'Графская 4', 'Воронцовский 22',
-    'Екатерининский 8', 'Воронцовский 20', 'Екатерининская 17'
+    'Екатерининский 8', 'Воронцовский 20', 'Екатерининская 17',
+    'Графская 11'
   ];
-  var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17'];
+  var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
   
   // Планы по месяцам (ВСЕГО по всем филиалам)
   var monthlyPlans = {
