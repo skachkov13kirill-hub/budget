@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>РСч — Анализ расчётного счёта</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #22263a;
+    --border: #2a2e3f;
+    --text: #e4e6ef;
+    --text-dim: #7a7f95;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00b894;
+    --green-bg: rgba(0,184,148,0.08);
+    --red: #fd7272;
+    --red-bg: rgba(253,114,114,0.08);
+    --yellow: #fdcb6e;
+    --yellow-bg: rgba(253,203,110,0.08);
+    --blue: #74b9ff;
+    --blue-bg: rgba(116,185,255,0.08);
+    --orange: #e17055;
+  }
+  
+  body {
+    font-family: 'Manrope', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* ===== HEADER ===== */
+  .header {
+    background: linear-gradient(135deg, #1a1d27 0%, #2d1b69 100%);
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .header h1 { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+  
+  .undo-btn {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    position: relative;
+  }
+  
+  .undo-btn:hover { background: var(--card-hover); color: var(--text); }
+  .undo-btn:disabled { opacity: 0.3; cursor: default; }
+  .undo-btn .badge {
+    position: absolute; top: -4px; right: -4px;
+    background: var(--accent); color: white;
+    font-size: 10px; font-weight: 800;
+    width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  
+  .header .period { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+  
+  .month-pills {
+    display: flex; gap: 5px; overflow-x: auto; padding: 10px 0 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .month-pills::-webkit-scrollbar { display: none; }
+  
+  .month-pills button {
+    white-space: nowrap; font-size: 12px; padding: 5px 10px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text);
+    font-family: inherit; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .month-pills button:hover { background: var(--card-hover); }
+  .month-pills button.active { background: var(--accent); border-color: var(--accent); }
+  
+  /* ===== BALANCE BAR ===== */
+  .balance-bar {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+  }
+  
+  .balance-item {
+    flex: 1;
+    background: var(--card);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  
+  .balance-item .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .balance-item .value { font-size: 16px; font-weight: 800; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .balance-item .sub { font-size: 10px; color: var(--text-dim); }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .blue { color: var(--blue); }
+  .yellow { color: var(--yellow); }
+  .orange { color: var(--orange); }
+  
+  /* ===== COMMISSION ALERT ===== */
+  .commission-alert {
+    background: var(--red-bg);
+    border-left: 3px solid var(--red);
+    padding: 10px 16px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .commission-alert .amount { font-weight: 800; color: var(--red); }
+  
+  /* ===== MAIN ===== */
+  .main { padding: 12px 12px 80px; max-width: 1000px; margin: 0 auto; }
+  
+  /* ===== CATEGORY SECTION ===== */
+  .cat-section { margin-bottom: 8px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  
+  .cat-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px;
+    background: var(--card); cursor: pointer; user-select: none;
+    transition: background 0.15s;
+  }
+  .cat-head:hover { background: var(--card-hover); }
+  
+  .cat-head .left { display: flex; align-items: center; gap: 8px; }
+  .cat-head .emoji { font-size: 18px; }
+  .cat-head .name { font-weight: 700; font-size: 14px; }
+  .cat-head .count { font-size: 11px; color: var(--text-dim); background: var(--bg); padding: 1px 7px; border-radius: 8px; font-weight: 600; }
+  .cat-head .right { display: flex; align-items: center; gap: 8px; }
+  .cat-head .total { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .cat-head .arrow { color: var(--text-dim); transition: transform 0.2s; font-size: 12px; }
+  .cat-head.open .arrow { transform: rotate(180deg); }
+  
+  .cat-body { display: none; background: var(--bg); }
+  .cat-body.open { display: block; }
+  
+  /* ===== TRANSACTION ROW ===== */
+  .tx {
+    display: grid;
+    grid-template-columns: 76px 1fr 95px 140px;
+    align-items: center;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    transition: background 0.1s;
+  }
+  .tx:hover { background: rgba(108,92,231,0.04); }
+  
+  .tx-date { color: var(--text-dim); font-weight: 500; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .tx-info { overflow: hidden; padding-right: 8px; }
+  .tx-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .tx-desc { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-sum { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  
+  .tx-cat select {
+    width: 100%; padding: 5px 6px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text);
+    font-family: inherit; font-size: 11px; font-weight: 500;
+    cursor: pointer;
+  }
+  .tx-cat select:focus { outline: none; border-color: var(--accent); }
+  
+  .dot-changed {
+    display: inline-block; width: 5px; height: 5px;
+    background: var(--yellow); border-radius: 50%;
+    margin-left: 4px; vertical-align: middle;
+  }
+  
+  /* ===== EKVAYRING GRID ===== */
+  .ekv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; padding: 10px 12px; }
+  .ekv-card {
+    background: var(--card); border-radius: 8px; padding: 10px;
+    border: 1px solid var(--border);
+  }
+  .ekv-card .mid { font-size: 10px; color: var(--text-dim); font-weight: 600; }
+  .ekv-card .total { font-size: 16px; font-weight: 800; color: var(--green); margin: 2px 0; }
+  .ekv-card .real { font-size: 11px; color: var(--text-dim); }
+  .ekv-card .ops { font-size: 10px; color: var(--text-dim); }
+  .ekv-card .branch-tag {
+    margin-top: 4px; padding: 2px 6px;
+    border-radius: 4px; font-size: 10px; font-weight: 700;
+    background: var(--accent); color: white;
+    display: inline-block; cursor: pointer;
+  }
+  .ekv-card .branch-tag.unset { background: var(--border); color: var(--text-dim); }
+  
+  /* ===== MERCHANT MAPPING MODAL ===== */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 14px;
+    padding: 20px; max-width: 360px; width: 90%;
+    border: 1px solid var(--border);
+  }
+  .modal h3 { font-size: 16px; margin-bottom: 12px; }
+  .modal .branches { display: flex; flex-direction: column; gap: 6px; }
+  .modal .branch-btn {
+    padding: 10px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg);
+    color: var(--text); font-family: inherit; font-size: 14px;
+    font-weight: 600; cursor: pointer; text-align: left;
+    transition: all 0.15s;
+  }
+  .modal .branch-btn:hover { background: var(--accent); border-color: var(--accent); }
+  .modal .cancel-btn {
+    margin-top: 10px; width: 100%; padding: 8px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-dim);
+    font-family: inherit; font-size: 13px; cursor: pointer;
+  }
+  
+  /* ===== TOAST ===== */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--accent); color: white;
+    padding: 10px 18px; border-radius: 10px;
+    font-weight: 600; font-size: 13px;
+    opacity: 0; transition: all 0.25s; z-index: 300;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 600px) {
+    .tx { grid-template-columns: 64px 1fr 80px; gap: 2px; padding: 8px 10px; }
+    .tx-cat { grid-column: 1 / -1; margin-top: 4px; }
+    .tx-cat select { max-width: 180px; }
+    .ekv-grid { grid-template-columns: repeat(2, 1fr); }
+    .balance-item .value { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <h1>📊 Расчётный счёт ИП</h1>
+      <div class="period" id="periodText"></div>
+    </div>
+    <button class="undo-btn" id="undoBtn" onclick="undo()" disabled title="Отменить (Ctrl+Z)">
+      ↩
+    </button>
+  </div>
+  <div class="month-pills" id="monthPills"></div>
+</div>
+
+<div class="balance-bar" id="balanceBar"></div>
+<div class="commission-alert" id="commissionAlert"></div>
+<div class="main" id="main"></div>
+<div class="toast" id="toast"></div>
+
+<!-- Merchant mapping modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <h3 id="modalTitle">Привязать к филиалу</h3>
+    <div class="branches" id="modalBranches"></div>
+    <button class="cancel-btn" onclick="closeModal()">Отмена</button>
+  </div>
+</div>
+
+<script>
+let DATA = null;
+let selectedMonth = 'all';
+let undoStack = [];  // { type:'category', id, oldCat, newCat } or { type:'merchant', merchant, oldBranch, newBranch }
+
+// Category & merchant changes
+let catChanges = {};
+let merchantMap = {};
+
+// Load saved
+try { catChanges = JSON.parse(localStorage.getItem('rsc_cats') || '{}'); } catch(e) {}
+try { merchantMap = JSON.parse(localStorage.getItem('rsc_merchants') || '{}'); } catch(e) {}
+
+const CATEGORIES = {
+  'Переводы себе':          { emoji: '💸', order: 1 },
+  'Аренда':                 { emoji: '🏠', order: 2 },
+  'Подрядчики (химчистка)': { emoji: '🧹', order: 3 },
+  'Подрядчики (ателье)':    { emoji: '🧵', order: 4 },
+  'Погашение кредитов':     { emoji: '💳', order: 5 },
+  'Реклама':                { emoji: '📢', order: 6 },
+  'Оплата по счетам':       { emoji: '📄', order: 7 },
+  'Налоги':                 { emoji: '📋', order: 8 },
+  'Комиссии банка':         { emoji: '🏦', order: 9 },
+  'Коммуналка':             { emoji: '🔧', order: 10 },
+  'Расходники':             { emoji: '📦', order: 11 },
+  'Амортизация':            { emoji: '🔨', order: 12 },
+  'Прочее':                 { emoji: '❓', order: 99 },
+};
+const CAT_NAMES = Object.keys(CATEGORIES);
+
+const BRANCHES = [
+  'В 8', 'М 16', 'М 50', 'М 65', 'П 30', 'П 69', 'Д 21',
+  'Химчистка 1', 'Химчистка 2', 'Не определён'
+];
+
+function getCat(tx) { return catChanges[tx.id] !== undefined ? catChanges[tx.id] : tx.category; }
+
+function fmt(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1).replace('.0','') + 'М';
+  if (n >= 10000) return Math.round(n/1000) + 'К';
+  return n.toLocaleString('ru-RU', {maximumFractionDigits: 0});
+}
+
+function fmtFull(n) { return n.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwYYk5LU9uTxaPhJkt8X89mXpTlfZaR8dSQcw3SNZtIws1nYRlxy_MAGErMPmO4dY_b1g/exec';
+
+function save() {
+  localStorage.setItem('rsc_cats', JSON.stringify(catChanges));
+  localStorage.setItem('rsc_merchants', JSON.stringify(merchantMap));
+}
+
+// === САМООБУЧЕНИЕ: синхронизация с Google Sheets ===
+
+async function syncToSheets(type, key, value) {
+  // Сохраняем правило в облако для будущих парсингов
+  try {
+    const response = await fetch(SHEETS_URL + '?action=saveBusinessRule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, key, value }),
+      mode: 'no-cors'  // Apps Script требует
+    });
+    console.log(`✓ Правило сохранено: ${type} ${key} → ${value}`);
+  } catch (e) {
+    console.warn('Sync error (non-critical):', e);
+  }
+}
+
+async function loadRulesFromSheets() {
+  // Загружаем правила из облака при старте
+  try {
+    const script = document.createElement('script');
+    script.src = SHEETS_URL + '?action=getBusinessRules&callback=applyCloudRules&t=' + Date.now();
+    document.head.appendChild(script);
+  } catch (e) {
+    console.warn('Load rules error:', e);
+  }
+}
+
+function applyCloudRules(data) {
+  if (!data || data.error) return;
+  
+  let applied = 0;
+  
+  // Применить правила мерчантов (если нет локальных)
+  if (data.merchants) {
+    for (const [mid, branch] of Object.entries(data.merchants)) {
+      if (!merchantMap[mid]) {
+        merchantMap[mid] = branch;
+        applied++;
+      }
+    }
+  }
+  
+  // Применить правила категорий
+  if (data.categories) {
+    for (const [key, cat] of Object.entries(data.categories)) {
+      // Найти транзакцию по контрагенту и применить категорию
+      const tx = DATA.transactions.find(t => t.contragent === key || t.id == key);
+      if (tx && catChanges[tx.id] === undefined) {
+        catChanges[tx.id] = cat;
+        applied++;
+      }
+    }
+  }
+  
+  if (applied > 0) {
+    save();
+    render();
+    toast(`☁️ Загружено ${applied} правил из облака`);
+  }
+}
+
+// ===== UNDO =====
+function pushUndo(action) {
+  undoStack.push(action);
+  if (undoStack.length > 50) undoStack.shift();
+  updateUndoBtn();
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  const action = undoStack.pop();
+  if (action.type === 'category') {
+    if (action.oldCat === null) delete catChanges[action.id];
+    else catChanges[action.id] = action.oldCat;
+    toast('↩ Отменено');
+  } else if (action.type === 'merchant') {
+    if (action.oldBranch === null) delete merchantMap[action.merchant];
+    else merchantMap[action.merchant] = action.oldBranch;
+    toast('↩ Отменено');
+  }
+  save();
+  render();
+}
+
+function updateUndoBtn() {
+  const btn = document.getElementById('undoBtn');
+  btn.disabled = !undoStack.length;
+  const existing = btn.querySelector('.badge');
+  if (existing) existing.remove();
+  if (undoStack.length) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = undoStack.length;
+    btn.appendChild(badge);
+  }
+}
+
+// Ctrl+Z support
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+});
+
+// ===== CATEGORY CHANGE =====
+function changeCat(id, newCat) {
+  const tx = DATA.transactions.find(t => t.id === id);
+  if (!tx) return;
+  const oldCat = catChanges[id] !== undefined ? catChanges[id] : null;
+  pushUndo({ type: 'category', id, oldCat, newCat: newCat });
+  
+  if (newCat === tx.category) delete catChanges[id];
+  else catChanges[id] = newCat;
+  
+  save();
+  
+  // Самообучение: сохранить правило в облако по контрагенту
+  if (tx.contragent && newCat !== tx.category) {
+    syncToSheets('category', tx.contragent, newCat);
+  }
+  
+  toast(`✓ → ${CATEGORIES[newCat]?.emoji || '❓'} ${newCat}`);
+  render();
+}
+
+// ===== MERCHANT MAPPING =====
+let currentMerchant = null;
+
+function openMerchantModal(mid) {
+  currentMerchant = mid;
+  document.getElementById('modalTitle').textContent = `Мерчант №${mid}`;
+  const container = document.getElementById('modalBranches');
+  container.innerHTML = BRANCHES.map(b =>
+    `<button class="branch-btn" onclick="setMerchantBranch('${b}')">${b}</button>`
+  ).join('');
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalOverlay')) return;
+  document.getElementById('modalOverlay').classList.remove('open');
+  currentMerchant = null;
+}
+
+function setMerchantBranch(branch) {
+  if (!currentMerchant) return;
+  const old = merchantMap[currentMerchant] || null;
+  pushUndo({ type: 'merchant', merchant: currentMerchant, oldBranch: old, newBranch: branch });
+  merchantMap[currentMerchant] = branch;
+  save();
+  
+  // Самообучение: сохранить привязку в облако
+  syncToSheets('merchant', currentMerchant, branch);
+  
+  toast(`✓ №${currentMerchant} → ${branch}`);
+  closeModal();
+  render();
+}
+
+// ===== MONTH FILTER =====
+function getMonths(txs) {
+  const s = new Set();
+  txs.forEach(t => { const [d,m,y] = t.date.split('.'); s.add(`${y}-${m}`); });
+  return [...s].sort();
+}
+
+function filterMonth(txs) {
+  if (selectedMonth === 'all') return txs;
+  return txs.filter(t => { const [d,m,y] = t.date.split('.'); return `${y}-${m}` === selectedMonth; });
+}
+
+function setMonth(m) { selectedMonth = m; render(); }
+
+// ===== TOGGLE SECTION =====
+function toggle(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+
+// ===== RENDER =====
+function render() {
+  if (!DATA) return;
+  
+  document.getElementById('periodText').textContent =
+    `Счёт ••5630 • ${DATA.period}`;
+  
+  updateUndoBtn();
+  
+  // Month pills
+  const months = getMonths(DATA.transactions);
+  const mnames = { '01':'Янв','02':'Фев','03':'Мар','04':'Апр','05':'Май','06':'Июн','07':'Июл','08':'Авг','09':'Сен','10':'Окт','11':'Ноя','12':'Дек' };
+  document.getElementById('monthPills').innerHTML =
+    `<button class="${selectedMonth==='all'?'active':''}" onclick="setMonth('all')">Все</button>` +
+    months.map(m => {
+      const [y, mo] = m.split('-');
+      return `<button class="${selectedMonth===m?'active':''}" onclick="setMonth('${m}')">${mnames[mo]} ${y.slice(2)}</button>`;
+    }).join('');
+  
+  // Balance bar
+  const changes = Object.keys(catChanges).length + Object.keys(merchantMap).length;
+  document.getElementById('balanceBar').innerHTML = `
+    <div class="balance-item">
+      <div class="label">Баланс на ${DATA.balance_end_date}</div>
+      <div class="value blue">${fmt(DATA.balance_end)}₽</div>
+    </div>
+    <div class="balance-item">
+      <div class="label">Поступления</div>
+      <div class="value green">+${fmt(DATA.turnover_credit)}₽</div>
+    </div>
+    <div class="balance-item">
+      <div class="label">Списания</div>
+      <div class="value red">-${fmt(DATA.turnover_debit)}₽</div>
+    </div>
+    <div class="balance-item">
+      <div class="label">Изменений</div>
+      <div class="value" style="color:var(--accent)">${changes}</div>
+    </div>
+  `;
+  
+  // Commission alert
+  document.getElementById('commissionAlert').innerHTML = `
+    <div>⚠️ Комиссия Сбербанка 0.7% за период: удержано <span class="amount">${fmtFull(DATA.total_commission)}₽</span></div>
+    <div style="font-size:11px;color:var(--text-dim)">Реальный оборот: ${fmt(DATA.total_real_turnover)}₽</div>
+  `;
+  
+  const filtered = filterMonth(DATA.transactions);
+  
+  // Group by category
+  const groups = {};
+  filtered.forEach(t => {
+    const cat = getCat(t);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(t);
+  });
+  
+  const sortedCats = Object.keys(groups).sort((a,b) => (CATEGORIES[a]?.order||99) - (CATEGORIES[b]?.order||99));
+  
+  let html = renderEkvayring();
+  
+  sortedCats.forEach(cat => {
+    html += renderCatSection(cat, groups[cat]);
+  });
+  
+  document.getElementById('main').innerHTML = html;
+}
+
+function renderEkvayring() {
+  const ekv = DATA.ekvayring;
+  const merchants = Object.entries(ekv).sort((a,b) => b[1].received - a[1].received);
+  const totalRec = merchants.reduce((s,[_,d]) => s + d.received, 0);
+  const totalReal = merchants.reduce((s,[_,d]) => s + d.real_turnover, 0);
+  const totalComm = merchants.reduce((s,[_,d]) => s + d.commission, 0);
+  const totalCount = merchants.reduce((s,[_,d]) => s + d.count, 0);
+  
+  const mapped = merchants.filter(([m]) => merchantMap[m]).length;
+  
+  const cards = merchants.map(([id, d]) => {
+    const branch = merchantMap[id];
+    const branchTag = branch
+      ? `<span class="branch-tag" onclick="event.stopPropagation();openMerchantModal('${id}')">${branch}</span>`
+      : `<span class="branch-tag unset" onclick="event.stopPropagation();openMerchantModal('${id}')">+ Филиал</span>`;
+    return `
+      <div class="ekv-card">
+        <div class="mid">Мерчант №${id}</div>
+        <div class="total">${fmt(d.received)}₽</div>
+        <div class="real">Реальный: ${fmt(d.real_turnover)}₽ <span style="color:var(--red)">(-${fmt(d.commission)})</span></div>
+        <div class="ops">${d.count} операций • ${d.active_days} дней</div>
+        ${branchTag}
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div class="cat-section">
+      <div class="cat-head" onclick="toggle(this)">
+        <div class="left">
+          <span class="emoji">💰</span>
+          <span class="name">Эквайринг</span>
+          <span class="count">${totalCount} шт • ${mapped}/${merchants.length} привязано</span>
+        </div>
+        <div class="right">
+          <span class="total green">+${fmt(totalRec)}₽</span>
+          <span class="arrow">▼</span>
+        </div>
+      </div>
+      <div class="cat-body">
+        <div style="padding:8px 14px;font-size:12px;color:var(--text-dim)">
+          Нажмите «+ Филиал» чтобы привязать мерчант к точке. Это нужно для сверки с отчётами портных.
+        </div>
+        <div class="ekv-grid">${cards}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCatSection(catName, txs) {
+  const cat = CATEGORIES[catName] || { emoji: '❓', order: 99 };
+  const total = txs.reduce((s,t) => s + t.amount, 0);
+  
+  const rows = txs.sort((a,b) => {
+    const da = a.date.split('.').reverse().join('');
+    const db = b.date.split('.').reverse().join('');
+    return da.localeCompare(db);
+  }).map(t => {
+    const changed = catChanges[t.id] !== undefined;
+    const opts = CAT_NAMES.map(c =>
+      `<option value="${c}" ${c===catName?'selected':''}>${CATEGORIES[c]?.emoji||'❓'} ${c}</option>`
+    ).join('');
+    
+    return `
+      <div class="tx">
+        <div class="tx-date">${t.date}</div>
+        <div class="tx-info">
+          <div class="tx-name">${esc(t.contragent || 'Не указан')}${changed?'<span class="dot-changed"></span>':''}</div>
+          <div class="tx-desc" title="${esc(t.purpose)}">${esc(t.purpose)}</div>
+        </div>
+        <div class="tx-sum red">-${fmtFull(t.amount)}</div>
+        <div class="tx-cat">
+          <select onchange="changeCat(${t.id},this.value)">${opts}</select>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div class="cat-section">
+      <div class="cat-head" onclick="toggle(this)">
+        <div class="left">
+          <span class="emoji">${cat.emoji}</span>
+          <span class="name">${catName}</span>
+          <span class="count">${txs.length}</span>
+        </div>
+        <div class="right">
+          <span class="total red">-${fmt(total)}₽</span>
+          <span class="arrow">▼</span>
+        </div>
+      </div>
+      <div class="cat-body">${rows}</div>
+    </div>
+  `;
+}
+
+// Close modal on escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
+
+<script id="dataLoad">
+DATA = {"transactions":[{"date":"01.07.2025","amount":430000.0,"direction":"out","purpose":"430 000,00 35 01 БИК 044525974 АО \"ТБанк\" Перевод средств между счетами ип НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":0},{"date":"02.07.2025","amount":35000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":1},{"date":"03.07.2025","amount":50000.0,"direction":"out","purpose":"Перевод денежных средств на нужды","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":2},{"date":"05.07.2025","amount":30000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":3},{"date":"06.07.2025","amount":20000.0,"direction":"out","purpose":"Перевод собственных средсьв на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":4},{"date":"06.07.2025","amount":66365.7,"direction":"out","purpose":"66 365,70 40 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Оплата по счету № 865 от 03.07.2025. Сумма 66365-70. НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Оплата по счетам","id":5},{"date":"07.07.2025","amount":15000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":6},{"date":"07.07.2025","amount":25000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":7},{"date":"08.07.2025","amount":5000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":8},{"date":"08.07.2025","amount":10000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":9},{"date":"08.07.2025","amount":25000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":10},{"date":"10.07.2025","amount":50000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":11},{"date":"12.07.2025","amount":375.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":12},{"date":"12.07.2025","amount":100000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":13},{"date":"13.07.2025","amount":1250.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":14},{"date":"13.07.2025","amount":50000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":15},{"date":"14.07.2025","amount":1222.5,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":16},{"date":"14.07.2025","amount":9914.84,"direction":"out","purpose":"Оплата по счету № 74 от 30.06.2025.","contragent":"Васильева Елена Александровна","merchant":"","commission":"","category":"Оплата по счетам","id":17},{"date":"14.07.2025","amount":48900.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":18},{"date":"15.07.2025","amount":750.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":19},{"date":"15.07.2025","amount":30000.0,"direction":"out","purpose":"Перевод средств на нужды ип НДС не","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":20},{"date":"16.07.2025","amount":375.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":21},{"date":"16.07.2025","amount":5000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":22},{"date":"16.07.2025","amount":10000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":23},{"date":"17.07.2025","amount":325.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":24},{"date":"17.07.2025","amount":13000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":25},{"date":"17.07.2025","amount":73232.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":26},{"date":"19.07.2025","amount":1250.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":27},{"date":"19.07.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":28},{"date":"22.07.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":29},{"date":"23.07.2025","amount":100000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":30},{"date":"27.07.2025","amount":50000.0,"direction":"out","purpose":"Без описания","contragent":"","merchant":"","commission":"","category":"Прочее","id":31},{"date":"29.07.2025","amount":1.0,"direction":"out","purpose":"Комиссия за сервис СберРейтинг [Тариф Оптимальный] за период с 2025-07-29 по 2025-08-28, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":32},{"date":"29.07.2025","amount":10000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":33},{"date":"01.08.2025","amount":7000.0,"direction":"out","purpose":"7 000,00 63 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":34},{"date":"01.08.2025","amount":210000.0,"direction":"out","purpose":"210 000,00 62 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств в другой банк НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":35},{"date":"04.08.2025","amount":100000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":36},{"date":"05.08.2025","amount":70000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":37},{"date":"07.08.2025","amount":40000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":38},{"date":"08.08.2025","amount":35000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":39},{"date":"10.08.2025","amount":125.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":40},{"date":"10.08.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":41},{"date":"12.08.2025","amount":1125.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":42},{"date":"12.08.2025","amount":45000.0,"direction":"out","purpose":"Перевод собственных стресс на нужды","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":43},{"date":"14.08.2025","amount":500.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":44},{"date":"14.08.2025","amount":20000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":45},{"date":"15.08.2025","amount":500.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":46},{"date":"15.08.2025","amount":20000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":47},{"date":"17.08.2025","amount":750.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":48},{"date":"17.08.2025","amount":30000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":49},{"date":"18.08.2025","amount":73199.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":50},{"date":"21.08.2025","amount":250.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":51},{"date":"21.08.2025","amount":10000.0,"direction":"out","purpose":"Перевод собственных стредств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":52},{"date":"22.08.2025","amount":10000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":53},{"date":"24.08.2025","amount":15000.0,"direction":"out","purpose":"Без описания","contragent":"","merchant":"","commission":"","category":"Прочее","id":54},{"date":"24.08.2025","amount":34000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":55},{"date":"26.08.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":56},{"date":"28.08.2025","amount":990.0,"direction":"out","purpose":"Комиссия за сервис СберРейтинг [Тариф Оптимальный] за период с 2025-08-29 по 2025-09-28, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":57},{"date":"29.08.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":58},{"date":"31.08.2025","amount":91000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":59},{"date":"31.08.2025","amount":200000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":60},{"date":"31.08.2025","amount":275000.0,"direction":"out","purpose":"275 000,00 80 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств между счетами НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":61},{"date":"01.09.2025","amount":99.3,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":62},{"date":"01.09.2025","amount":397.2,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":63},{"date":"01.09.2025","amount":595.8,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":64},{"date":"01.09.2025","amount":794.4,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":65},{"date":"01.09.2025","amount":993.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":66},{"date":"01.09.2025","amount":993.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":67},{"date":"01.09.2025","amount":993.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":68},{"date":"01.09.2025","amount":1191.6,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":69},{"date":"01.09.2025","amount":1493.83,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":70},{"date":"01.09.2025","amount":1986.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":71},{"date":"01.09.2025","amount":3773.4,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":72},{"date":"01.09.2025","amount":5035.47,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":73},{"date":"01.09.2025","amount":5100.0,"direction":"out","purpose":"5 100,00 130 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств. НДС не облагается","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":74},{"date":"03.09.2025","amount":462.5,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":75},{"date":"03.09.2025","amount":68500.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":76},{"date":"04.09.2025","amount":950.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":77},{"date":"04.09.2025","amount":38000.0,"direction":"out","purpose":"Перевод союственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":78},{"date":"05.09.2025","amount":1425.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":79},{"date":"05.09.2025","amount":57000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":80},{"date":"09.09.2025","amount":1250.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":81},{"date":"09.09.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":82},{"date":"10.09.2025","amount":2500.0,"direction":"out","purpose":"Комиссия за перевод средств со счета","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":83},{"date":"10.09.2025","amount":100000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":84},{"date":"17.09.2025","amount":3190.0,"direction":"out","purpose":"Плата за СберБизнес Прайм за период18.09.2025-17.10.2025 дог. от 22.07.2021№40802810655000125630 в размере3190.00 руб., из них за Организациюобслуживания НБС 24.00 руб., в т.ч.НДС 4.00 руб.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":85},{"date":"17.09.2025","amount":33908.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":86},{"date":"17.09.2025","amount":64434.18,"direction":"out","purpose":"Арендная плата и компенсация за коммунальные услути по показаниямприборов учета за август 2025 подоговору No24М/Гр4 НДС необлагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":87},{"date":"18.09.2025","amount":5089.01,"direction":"out","purpose":"5 089,01 95 01 БИК 044525700 АО \"Райффайзенбанк\" Оплата услуг Маркета по счету ЛСМ- 5352818168-1 НДС не облагается.","contragent":"ООО\"ЯНДЕКС МАРКЕТ\"","merchant":"","commission":"","category":"Реклама","id":88},{"date":"18.09.2025","amount":150000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":89},{"date":"21.09.2025","amount":100000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":90},{"date":"25.09.2025","amount":64953.4,"direction":"out","purpose":"Без описания","contragent":"ООО \"ДубльГИС\"","merchant":"","commission":"","category":"Реклама","id":91},{"date":"28.09.2025","amount":990.0,"direction":"out","purpose":"Комиссия за сервис Безопасный бизнес [Тариф Оптимальный] за период с 2025-09-29 по 2025-10-28, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":92},{"date":"28.09.2025","amount":1500.0,"direction":"out","purpose":"1 500,00 98 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств между счетами НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":93},{"date":"29.09.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":94},{"date":"30.09.2025","amount":19945.45,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":95},{"date":"01.10.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":96},{"date":"01.10.2025","amount":300.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":97},{"date":"01.10.2025","amount":1500.0,"direction":"out","purpose":"Оплата по договору аренды №31H от","contragent":"ТСЖ \"ДЕВЯТКИНО\"","merchant":"","commission":"","category":"Аренда","id":98},{"date":"01.10.2025","amount":6560.85,"direction":"out","purpose":"Оплата переменной части по договору","contragent":"","merchant":"","commission":"","category":"Коммуналка","id":99},{"date":"01.10.2025","amount":8712.81,"direction":"out","purpose":"Оплата по счету № 98 от 31.07.2025.","contragent":"Васильева Елена Александровна","merchant":"","commission":"","category":"Оплата по счетам","id":100},{"date":"01.10.2025","amount":10014.31,"direction":"out","purpose":"Оплата по счету № 99 от 31.08.2025.","contragent":"Васильева Елена Александровна","merchant":"","commission":"","category":"Оплата по счетам","id":101},{"date":"01.10.2025","amount":27562.5,"direction":"out","purpose":"Октябрь 2025 ателье НДС не","contragent":"","merchant":"","commission":"","category":"Подрядчики (ателье)","id":102},{"date":"01.10.2025","amount":44940.0,"direction":"out","purpose":"44 940,00 105 01 БИК 044525104 ООО \"Банк Точка\" Оплата по договору № 01-01/05 от 1.05.24 за октябрь месяц 2025 года В т.ч. НДС 5% - 2 140 руб","contragent":"ООО \"Банк Точка\"","merchant":"","commission":"","category":"Подрядчики (химчистка)","id":103},{"date":"01.10.2025","amount":60000.0,"direction":"out","purpose":"60 000,00 102 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Арендная плата по договору No24М/Гр4 за октябрь 2025 года НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":104},{"date":"01.10.2025","amount":135000.0,"direction":"out","purpose":"Отпала за Октябрь 2025 года постоянной части арендной платы всумме 135000 рублей 00 копеек подоговору аренды №18 от 18.06.24 НДСне облагается","contragent":"","merchant":"","commission":"","category":"Аренда","id":105},{"date":"02.10.2025","amount":200.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":106},{"date":"03.10.2025","amount":150000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":107},{"date":"04.10.2025","amount":80000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":108},{"date":"06.10.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":109},{"date":"06.10.2025","amount":23436.0,"direction":"out","purpose":"7641) Согласно договору на оказаниеуслуг N 335/25 от 13 июня 2025 г. НДСне облагается.","contragent":"АО КБ \"Модульбанк\"","merchant":"","commission":"","category":"Прочее","id":110},{"date":"07.10.2025","amount":1800.0,"direction":"out","purpose":"Оплата по счету № 230 от 03.10.2025.","contragent":"Пашкова Оксана Витальевна","merchant":"","commission":"","category":"Оплата по счетам","id":111},{"date":"07.10.2025","amount":85000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":112},{"date":"08.10.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":113},{"date":"08.10.2025","amount":20000.0,"direction":"out","purpose":"20 000,00 119 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств между счетами НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":114},{"date":"08.10.2025","amount":26000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":115},{"date":"09.10.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":116},{"date":"09.10.2025","amount":5711.18,"direction":"out","purpose":"5 711,18 124 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Доплата по счету № 1263 от 09.10.2025. Сумма 5711-18. НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Оплата по счетам","id":117},{"date":"10.10.2025","amount":10000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":118},{"date":"17.10.2025","amount":3190.0,"direction":"out","purpose":"Плата за СберБизнес Прайм за период","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":119},{"date":"17.10.2025","amount":33443.67,"direction":"out","purpose":"Погашение просроченной задолженности по договору№623411828814-23-1 от 17.05.2023 г.НДС не облагается","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":120},{"date":"19.10.2025","amount":100.0,"direction":"out","purpose":"Перевод средств. НДС не облагается.","contragent":"","merchant":"","commission":"","category":"Прочее","id":121},{"date":"20.10.2025","amount":360517.55,"direction":"out","purpose":"Перевод собственных средств между","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":122},{"date":"28.10.2025","amount":990.0,"direction":"out","purpose":"Комиссия за сервис Безопасный бизнес[Тариф Оптимальный] за период с 2025-10-29 по 2025-11-28, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":123},{"date":"01.11.2025","amount":649.59,"direction":"out","purpose":"649,59 137 01 БИК 044030790 ПАО \"БАНК \"САНКТ-ПЕТЕРБУРГ\" Оплата по счету № 203984 от 31.10.2025. Сумма 649,59. НДС не облагается.","contragent":"АО \"БАНК \"","merchant":"","commission":"","category":"Оплата по счетам","id":124},{"date":"01.11.2025","amount":1500.0,"direction":"out","purpose":"Оплата по договору аренды №31H от","contragent":"ТСЖ \"ДЕВЯТКИНО\"","merchant":"","commission":"","category":"Аренда","id":125},{"date":"01.11.2025","amount":32917.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":126},{"date":"01.11.2025","amount":50000.0,"direction":"out","purpose":"50 000,00 133 01 БИК 044525104 ООО \"Банк Точка\" Оплата по договору № 01-01/05 от 1.05.24 за ноябрь месяц 2025 года. В том числе НДС 2500,00 рублей.","contragent":"ООО \"Банк Точка\"","merchant":"","commission":"","category":"Подрядчики (химчистка)","id":127},{"date":"01.11.2025","amount":62000.0,"direction":"out","purpose":"62 000,00 132 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Арендная плата за ноябрь 2025 по договору No24М/Гр4 НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":128},{"date":"01.11.2025","amount":80000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":129},{"date":"01.11.2025","amount":96000.0,"direction":"out","purpose":"96 000,00 136 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств меджу счетами НДС не облагается.","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":130},{"date":"01.11.2025","amount":135000.0,"direction":"out","purpose":"Отпала за ноябрь 2025 года постоянной части арендной платы в сумме 135000рублей 00 копеек по договору аренды№18 от 18.06.24 НДС не облагается.","contragent":"","merchant":"","commission":"","category":"Аренда","id":131},{"date":"01.11.2025","amount":550.32,"direction":"out","purpose":"Выплата за операцию с бонусами","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":132},{"date":"01.11.2025","amount":450000.0,"direction":"out","purpose":"перевод личные средства","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":133},{"date":"02.11.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":134},{"date":"02.11.2025","amount":6400.0,"direction":"out","purpose":"Оплата по счету № 250 от 01.11.2025.","contragent":"Пашкова Оксана Витальевна","merchant":"","commission":"","category":"Оплата по счетам","id":135},{"date":"05.11.2025","amount":200.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":136},{"date":"06.11.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":137},{"date":"06.11.2025","amount":27562.5,"direction":"out","purpose":"Ноябрь 2025 ателье НДС не облагается.","contragent":"","merchant":"","commission":"","category":"Подрядчики (ателье)","id":138},{"date":"07.11.2025","amount":5406.98,"direction":"out","purpose":"Компенсация за коммунальные услути по показаниям приборовучета засентябрь 2025 г. по договоруNo24М/Гр4 НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Коммуналка","id":139},{"date":"10.11.2025","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":140},{"date":"01.12.2025","amount":40.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":141},{"date":"01.12.2025","amount":280.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":142},{"date":"01.12.2025","amount":990.0,"direction":"out","purpose":"Комиссия за сервис Безопасный бизнес [Тариф Оптимальный] за период с 2025-12-01 по 2025-12-31, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":143},{"date":"01.12.2025","amount":1040.0,"direction":"out","purpose":"Комиссия за ведение счета 40802810655000125630 по договоруРКО № 40802810655000125630 от22.07.2021 за период с 01.11.2025 по30.11.2025 за 30 дней. НДС необлагается","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":144},{"date":"01.12.2025","amount":1500.0,"direction":"out","purpose":"Оплата по договору аренды №31H от","contragent":"ТСЖ \"ДЕВЯТКИНО\"","merchant":"","commission":"","category":"Аренда","id":145},{"date":"01.12.2025","amount":3190.0,"direction":"out","purpose":"Плата за СберБизнес Прайм за период","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":146},{"date":"01.12.2025","amount":15766.1,"direction":"out","purpose":"Оплата по счету № 137 от 30.09.2025.","contragent":"Васильева Елена Александровна","merchant":"","commission":"","category":"Оплата по счетам","id":147},{"date":"01.12.2025","amount":27562.5,"direction":"out","purpose":"Декабрь 2025 ателье НДС не","contragent":"","merchant":"","commission":"","category":"Подрядчики (ателье)","id":148},{"date":"01.12.2025","amount":29765.71,"direction":"out","purpose":"Оплата по счету № 138 от 31.10.2025.","contragent":"Васильева Елена Александровна","merchant":"","commission":"","category":"Оплата по счетам","id":149},{"date":"01.12.2025","amount":32621.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":150},{"date":"01.12.2025","amount":50000.0,"direction":"out","purpose":"50 000,00 144 01 БИК 044525104 ООО \"Банк Точка\" Оплата по договору № 01-01/05 от 1.05.24 за декабрь месяц 2025 года. В том числе НДС 2500,00 рублей.","contragent":"ООО \"Банк Точка\"","merchant":"","commission":"","category":"Подрядчики (химчистка)","id":151},{"date":"01.12.2025","amount":62000.0,"direction":"out","purpose":"62 000,00 142 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Арендная плата за декабрь 2025 по договору No24М/Гр4 НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":152},{"date":"01.12.2025","amount":103000.0,"direction":"out","purpose":"103 000,00 152 01 БИК 044525974 АО \"ТБанк\" Перевод собственных средств между счетами НДС не облагается","contragent":"АО \"ТБанк\"","merchant":"","commission":"","category":"Переводы себе","id":153},{"date":"01.12.2025","amount":135000.0,"direction":"out","purpose":"Отпала за декабрь 2025 года постоянной части арендной платы всумме 135000 рублей 00 копеек подоговору аренды №18 от 18.06.24 НДСне облагается.","contragent":"","merchant":"","commission":"","category":"Аренда","id":154},{"date":"01.12.2025","amount":160000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":155},{"date":"01.12.2025","amount":600000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":156},{"date":"03.12.2025","amount":12900.0,"direction":"out","purpose":"Оплата по счету № 271 от 30.11.2025.","contragent":"Пашкова Оксана Витальевна","merchant":"","commission":"","category":"Оплата по счетам","id":157},{"date":"03.12.2025","amount":15000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":158},{"date":"04.12.2025","amount":89000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":159},{"date":"07.12.2025","amount":150000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":160},{"date":"08.12.2025","amount":4278.33,"direction":"out","purpose":"4 278,33 159 01 БИК 044030790 ПАО \"БАНК \"САНКТ-ПЕТЕРБУРГ\" Оплата задолжномти. Сумма 4278,33. НДС не облагается.","contragent":"АО \"БАНК \"","merchant":"","commission":"","category":"Оплата по счетам","id":161},{"date":"10.12.2025","amount":112000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":162},{"date":"13.12.2025","amount":53922.0,"direction":"out","purpose":"53 922,00 161 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Услуги химчистки Согласно договору на оказание услуг N 335/25 от 13 июня 2025 г. НДС не облагается.","contragent":"АО КБ \"Модульбанк\"","merchant":"","commission":"","category":"Прочее","id":163},{"date":"15.12.2025","amount":7120.0,"direction":"out","purpose":"7 120,00 162 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Оллата переменной части за октябрь 2025 по договору No24М/Гр4 НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Коммуналка","id":164},{"date":"16.12.2025","amount":23760.0,"direction":"out","purpose":"Оплата по счету № 3014 от 16 декабря","contragent":"ООО \"УАЙКЛАЕНТС\"","merchant":"","commission":"","category":"Реклама","id":165},{"date":"16.12.2025","amount":70000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":166},{"date":"21.12.2025","amount":100000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":167},{"date":"23.12.2025","amount":53658.0,"direction":"out","purpose":"Единый налоговый платеж НДС не","contragent":"","merchant":"","commission":"","category":"Налоги","id":168},{"date":"29.12.2025","amount":1500.0,"direction":"out","purpose":"Оплата по договору аренды №31H от","contragent":"ТСЖ \"ДЕВЯТКИНО\"","merchant":"","commission":"","category":"Аренда","id":169},{"date":"29.12.2025","amount":27562.5,"direction":"out","purpose":"Январь 2026 ателье НДС не облагается.","contragent":"","merchant":"","commission":"","category":"Подрядчики (ателье)","id":170},{"date":"29.12.2025","amount":50000.0,"direction":"out","purpose":"50 000,00 170 01 БИК 044525104 ООО \"Банк Точка\" Оплата по договору № 01-01/05 от 1.05.24 за январь месяц 2026 года. В том числе НДС 2500,00 рублей.","contragent":"ООО \"Банк Точка\"","merchant":"","commission":"","category":"Подрядчики (химчистка)","id":171},{"date":"29.12.2025","amount":62000.0,"direction":"out","purpose":"62 000,00 168 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Арендная плата за январь 2026 по договору No24М/Гр4 НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":172},{"date":"29.12.2025","amount":135000.0,"direction":"out","purpose":"Отпала за январь 2026 года постоянной части арендной платы в сумме 135000рублей 00 копеек по договору аренды№18 от 18.06.24 НДС не облагается.","contragent":"","merchant":"","commission":"","category":"Аренда","id":173},{"date":"29.12.2025","amount":320000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":174},{"date":"30.12.2025","amount":82.76,"direction":"out","purpose":"Комиссия за ведение счета 40802810655000125630 по договоруРКО № 40802810655000125630 от22.07.2021 за период с 01.12.2025 по29.12.2025 за 29 дней. НДС необлагается","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":175},{"date":"30.12.2025","amount":500.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":176},{"date":"31.12.2025","amount":990.0,"direction":"out","purpose":"Комиссия за сервис Безопасный бизнес [Тариф Оптимальный] за период с 2026-01-01 по 2026-01-31, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":177},{"date":"31.12.2025","amount":50000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":178},{"date":"01.01.2026","amount":3190.0,"direction":"out","purpose":"Плата за СберБизнес Прайм за период","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":179},{"date":"03.01.2026","amount":700.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":180},{"date":"03.01.2026","amount":6000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":181},{"date":"04.01.2026","amount":11000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":182},{"date":"05.01.2026","amount":6823.07,"direction":"out","purpose":"6 823,07 5 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Оплата по счету № 1568 от 30.12.2025. Сумма 6823-07. НДС не облагается.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Оплата по счетам","id":183},{"date":"06.01.2026","amount":7000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":184},{"date":"07.01.2026","amount":92000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":185},{"date":"09.01.2026","amount":105000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":186},{"date":"10.01.2026","amount":30000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":187},{"date":"11.01.2026","amount":30000.0,"direction":"out","purpose":"Без описания","contragent":"","merchant":"","commission":"","category":"Прочее","id":188},{"date":"12.01.2026","amount":32742.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":189},{"date":"14.01.2026","amount":49000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":190},{"date":"16.01.2026","amount":25000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":191},{"date":"18.01.2026","amount":20000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":192},{"date":"18.01.2026","amount":26218.0,"direction":"out","purpose":"9045) Согласно договору на оказаниеуслуг N 335/25 от 13 июня 2025 г. НДСне облагается.","contragent":"АО КБ \"Модульбанк\"","merchant":"","commission":"","category":"Прочее","id":193},{"date":"19.01.2026","amount":90000.0,"direction":"out","purpose":"Перевод собственных средств на","contragent":"","merchant":"","commission":"","category":"Переводы себе","id":194},{"date":"31.01.2026","amount":649.59,"direction":"out","purpose":"Оплата по счёту № 6547 от 31.01.2026","contragent":"АО \"БАНК \"","merchant":"","commission":"","category":"Оплата по счетам","id":195},{"date":"31.01.2026","amount":990.0,"direction":"out","purpose":"Комиссия за сервис Безопасный бизнес [Тариф Оптимальный] за период с 2026-02-01 по 2026-02-28, в т.ч. НДС. Подоговору № 7001539624645361675 от2021-07-22.","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":196},{"date":"31.01.2026","amount":50000.0,"direction":"out","purpose":"50 000,00 18 01 БИК 044525104 ООО \"Банк Точка\" Оплата по договору № 01-01/05 от 1.05.24 за февраль месяц 2026 года. В том числе НДС 2500,00 рублей.","contragent":"ООО \"Банк Точка\"","merchant":"","commission":"","category":"Подрядчики (химчистка)","id":197},{"date":"31.01.2026","amount":61000.0,"direction":"out","purpose":"61 000,00 16 01 БИК 044525092 Московский Филиал АО КБ \"Модульбанк\" Арендная плата за февраль 2026 по договору No24М/Гр4 В том числе НДС 5 % - 2904,76 рублей.","contragent":"ООО \"ФСК ВЕКТОР\"","merchant":"","commission":"","category":"Аренда","id":198},{"date":"31.01.2026","amount":135000.0,"direction":"out","purpose":"Отпала за февраль 2026 года постоянной части арендной платы всумме 135000 рублей 00 копеек подоговору аренды №18 от 18.06.24 НДСне облагается.","contragent":"","merchant":"","commission":"","category":"Аренда","id":199},{"date":"01.02.2026","amount":3190.0,"direction":"out","purpose":"Плата за СберБизнес Прайм за период","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Комиссии банка","id":200},{"date":"02.02.2026","amount":100.0,"direction":"out","purpose":"Комиссия в другие банки (кредитные","contragent":"","merchant":"","commission":"","category":"Комиссии банка","id":201},{"date":"02.02.2026","amount":1500.0,"direction":"out","purpose":"Оплата по договору аренды №31H от","contragent":"ТСЖ \"ДЕВЯТКИНО\"","merchant":"","commission":"","category":"Аренда","id":202},{"date":"02.02.2026","amount":13567.14,"direction":"out","purpose":"Оплата коммунальных услуг по договору аренды нежилого помещенияномер 6-А от 15.05.2025 за декабрь2025г. НДС не облагается.","contragent":"АО \"БАНК \"","merchant":"","commission":"","category":"Аренда","id":203},{"date":"02.02.2026","amount":32651.0,"direction":"out","purpose":"Погашение задолженности по договору","contragent":"","merchant":"","commission":"","category":"Погашение кредитов","id":204},{"date":"02.02.2026","amount":42000.0,"direction":"out","purpose":"Оплата аренды квартиры по договору","contragent":"АО \"АЛЬФА-БАНК\"","merchant":"","commission":"","category":"Аренда","id":205},{"date":"02.02.2026","amount":67760.0,"direction":"out","purpose":"67 760,00 23 01 БИК 044030790 ПАО \"БАНК \"САНКТ-ПЕТЕРБУРГ\" Оплата по договору аренды нежилого помещения 6-А от 15.05.2024 за февраль 2026г. НДС не облагается.","contragent":"АО \"БАНК \"","merchant":"","commission":"","category":"Аренда","id":206},{"date":"03.02.2026","amount":60000.0,"direction":"out","purpose":"Без описания","contragent":"","merchant":"","commission":"","category":"Прочее","id":207},{"date":"04.02.2026","amount":66875.0,"direction":"out","purpose":"Без описания","contragent":"ПАО Сбербанк","merchant":"","commission":"","category":"Прочее","id":208}],"ekvayring":{"551000509106":{"count":826,"received":1125396.69,"real_turnover":1133330.0,"commission":7933.31,"active_days":111},"551000543875":{"count":352,"received":305477.58,"real_turnover":307631.0,"commission":2153.42,"active_days":133},"551000509088":{"count":876,"received":1024080.9,"real_turnover":1031300.0,"commission":7219.1,"active_days":173},"551000509104":{"count":801,"received":824457.11,"real_turnover":830268.99,"commission":5811.88,"active_days":162},"551000509100":{"count":638,"received":775731.6,"real_turnover":781200.0,"commission":5468.4,"active_days":164},"551000509097":{"count":520,"received":569685.09,"real_turnover":573701.0,"commission":4015.91,"active_days":158},"551000509105":{"count":308,"received":379112.5,"real_turnover":381784.99,"commission":2672.49,"active_days":128},"551000543874":{"count":821,"received":850330.72,"real_turnover":856324.99,"commission":5994.27,"active_days":162},"551000509101":{"count":284,"received":362950.43,"real_turnover":365508.99,"commission":2558.56,"active_days":63},"551000598190":{"count":147,"received":304761.63,"real_turnover":306910.0,"commission":2148.37,"active_days":59},"551000598191":{"count":251,"received":285338.55,"real_turnover":287350.0,"commission":2011.45,"active_days":60}},"period":"01.07.2025 — 05.02.2026","total_received":6807322.8,"total_real_turnover":6855309.97,"total_commission":47987.17,"ekv_count":5824,"balance_start":432646.82,"balance_end":31476.72,"balance_start_date":"01.07.2025","balance_end_date":"05.02.2026","turnover_debit":8264143.22,"turnover_credit":7862973.12};
+render();
+
+// Загрузить правила из облака при старте
+setTimeout(() => loadRulesFromSheets(), 500);
+</script>
+
+</body>
+</html>
