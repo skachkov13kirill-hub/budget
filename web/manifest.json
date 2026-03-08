@@ -1,6 +1,6 @@
 {
-  "name": "Семейный бюджет",
-  "short_name": "Бюджет",
+  "name": "DressCode Финансы",
+  "short_name": "DressCode",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f3f0ff",

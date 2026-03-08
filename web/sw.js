@@ -1,9 +1,13 @@
-const CACHE_NAME = 'finance-v4';
+const CACHE_NAME = 'dresscode-v4';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './family.html',
-  './dashboard.html',
+  './css/app.css',
+  './js/app.js',
+  './js/parser.js',
+  './js/overview.js',
+  './js/business.js',
+  './js/family.js',
   './manifest.json'
 ];
 
