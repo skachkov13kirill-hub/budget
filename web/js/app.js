@@ -272,6 +272,14 @@ function renderAll() {
     if (typeof renderFilials === 'function') renderFilials(state.branches);
   }
   if (typeof renderFamilyTab === 'function') renderFamilyTab();
+  // Disable future months in biz selector
+  var bizSel = document.getElementById('bizMonthSelect');
+  if (bizSel) {
+    var cm = new Date().getMonth() + 1;
+    bizSel.querySelectorAll('option').forEach(function(o) {
+      o.disabled = parseInt(o.value) > cm;
+    });
+  }
 }
 
 function showLastUpdate() {
