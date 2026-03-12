@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dresscode-v7';
+const CACHE_NAME = 'dresscode-v8';
 const URLS_TO_CACHE = [
   './',
   './index.html',
