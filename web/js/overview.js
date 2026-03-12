@@ -162,10 +162,26 @@ function renderCreditsChecklist() {
     '</div>';
   });
 
+  // +100К доход (галочка)
+  var extraReceived = typeof isExtraIncomeReceived === 'function' && isExtraIncomeReceived();
+  var extraAmount = typeof EXTRA_INCOME !== 'undefined' ? EXTRA_INCOME : 100000;
+  html += '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;background:rgba(0,200,100,0.04);margin:0 -12px;padding-left:12px;padding-right:12px;" onclick="toggleExtraIncome()">' +
+    '<div style="font-size:20px;cursor:pointer;flex-shrink:0;">' + (extraReceived ? '✅' : '⬜') + '</div>' +
+    '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:13px;font-weight:600;color:var(--green);' + (extraReceived ? 'text-decoration:line-through;opacity:0.5;' : '') + '">Доход +100К</div>' +
+      '<div style="font-size:11px;color:var(--text-3);">ежемесячный доход</div>' +
+    '</div>' +
+    '<div style="font-size:14px;font-weight:700;color:var(--green);' + (extraReceived ? 'opacity:0.4;' : '') + '">+' + fmtShort(extraAmount) + '</div>' +
+  '</div>';
+
   var remaining = totalAll - totalPaid;
+  var netRemaining = remaining - (extraReceived ? extraAmount : 0);
   html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:10px;font-weight:600;">' +
     '<span style="color:var(--green);">✅ Оплачено: ' + fmtShort(totalPaid) + '</span>' +
     '<span style="color:var(--text-3);">⏳ Осталось: ' + fmtShort(remaining) + '</span></div>';
+  if (extraReceived) {
+    html += '<div style="font-size:11px;color:var(--text-3);text-align:center;margin-top:4px;">С учётом +100К: осталось ' + fmtShort(Math.max(0, netRemaining)) + '</div>';
+  }
 
   el.innerHTML = html;
 }

@@ -1,14 +1,14 @@
-const CACHE_NAME = 'dresscode-v8';
+const CACHE_NAME = 'dresscode-v9';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './css/app.css?v=6',
-  './js/app.js?v=6',
-  './js/parser.js?v=6',
-  './js/overview.js?v=6',
-  './js/business.js?v=6',
-  './js/family.js?v=6',
-  './js/family-features.js?v=6',
+  './css/app.css?v=9',
+  './js/app.js?v=9',
+  './js/parser.js?v=9',
+  './js/overview.js?v=9',
+  './js/business.js?v=9',
+  './js/family.js?v=9',
+  './js/family-features.js?v=9',
   './manifest.json'
 ];
 

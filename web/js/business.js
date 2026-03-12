@@ -41,7 +41,7 @@ function renderBizOverview(data) {
   renderPlanner(data);
 }
 
-// ── DAILY PULSE (банковская перспектива) ──
+// ── DAILY PULSE (две базы: доходы и расходы) ──
 function renderDailyPulse(data) {
   var el = document.getElementById('dailyPulseCard');
   if (!el) return;
@@ -61,112 +61,111 @@ function renderDailyPulse(data) {
   var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
   var daysLeft = daysInMonth - dayOfMonth;
 
-  // Факт из API
   var factAtelie = parseFloat(t.fact.atelie) || 0;
   var factHimch = parseFloat(t.fact.himchistka) || 0;
   if (factAtelie <= 0 || dayOfMonth < 3) { el.style.display = 'none'; return; }
 
-  // Банковский приход/день = ателье/2 + химч (химч приходит вся)
+  // Дневные скорости (на р/с)
   var dailyBankAtelie = Math.round(factAtelie / 2 / dayOfMonth);
   var dailyBankHimch = Math.round(factHimch / dayOfMonth);
   var dailyBank = dailyBankAtelie + dailyBankHimch;
 
-  // Расходы с р/с за месяц
-  var himchCosts = Math.round(factHimch / dayOfMonth * daysInMonth * 0.6); // 60% от химч
+  // ДОХОДЫ за месяц (экстраполяция)
+  var incAtelie = dailyBankAtelie * daysInMonth;
+  var incHimch = dailyBankHimch * daysInMonth;
+  var extraReceived = isExtraIncomeReceived();
+  var incExtra = extraReceived ? EXTRA_INCOME : 0;
+  var totalIncome = incAtelie + incHimch + incExtra;
+
+  // РАСХОДЫ за месяц
+  var expHimch = Math.round(dailyBankHimch * daysInMonth * 0.6);
   var creditsPaid = typeof getCreditsPaidTotal === 'function' ? getCreditsPaidTotal() : 0;
   var creditsLeft = CREDIT_PAYMENTS - creditsPaid;
+  var totalExpenses = expHimch + FIXED_COSTS + creditsLeft;
 
-  // Прогноз прихода до конца месяца
-  var expectedIncome = dailyBank * daysLeft;
-
-  // «На семью» = (приход за весь месяц) − (расходы химч) − фикс − кредиты
-  var totalBankIncome = dailyBank * daysInMonth;
-  var familyMoney = totalBankIncome - himchCosts - FIXED_COSTS - creditsLeft;
-
+  var familyMoney = totalIncome - totalExpenses;
   var fmColor = familyMoney >= 0 ? 'var(--green)' : 'var(--red)';
   var fmEmoji = familyMoney >= 200000 ? '&#x2705;' : familyMoney >= 0 ? '&#x1F7E1;' : '&#x1F534;';
 
-  // План (если есть)
-  var planHtml = '';
-  if (t.plan && t.plan.total > 0) {
-    var planDaily = Math.round(t.plan.total / daysInMonth);
-    var deviationPct = planDaily > 0 ? Math.round((dailyBank * 2 / planDaily - 1) * 100) : 0;
-    // dailyBank*2 ≈ оборот/день (для сравнения с планом оборота)
-    var devSign = deviationPct > 0 ? '+' : '';
-    var devColor = deviationPct >= 0 ? 'var(--green)' : 'var(--red)';
-    planHtml =
-      '<div class="pulse-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.06);">' +
-        '<span style="font-size:12px;">&#x1F4CB; Оборот vs план</span>' +
-        '<span style="font-weight:700;color:' + devColor + ';">' + devSign + deviationPct + '%</span>' +
-      '</div>';
-  }
+  // Ещё придёт
+  var expectedIncome = dailyBank * daysLeft;
 
-  // Подушка: ввод баланса
+  // Ввод баланса
   var bufferHtml =
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">' +
-      '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">&#x1F4B0; Расчёт «на семью»</div>' +
+      '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">&#x1F3E6; Расч&#1105;т от баланса р/с</div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-        '<span style="font-size:12px;white-space:nowrap;">На счетах сейчас:</span>' +
+        '<span style="font-size:12px;white-space:nowrap;">Сейчас на р/с:</span>' +
         '<input type="text" id="pulseBalanceInput" inputmode="numeric" placeholder="сумма"' +
           ' style="flex:1;border:1.5px solid #ddd;border-radius:10px;padding:8px 12px;font-size:15px;font-weight:700;text-align:right;max-width:150px;background:#FAFAFA;"' +
-          ' oninput="calcPulseResult(this.value,' + dailyBank + ',' + daysLeft + ',' + daysInMonth + ',' + himchCosts + ',' + creditsLeft + ')">' +
+          ' oninput="calcPulseResult(this.value,' + dailyBank + ',' + daysLeft + ',' + daysInMonth + ',' + totalExpenses + ')">' +
       '</div>' +
       '<div id="pulseCalcResult">' +
         '<div class="pulse-row">' +
-          '<span style="font-size:12px;">&#x1F4E5; Ещё придёт за ' + daysLeft + ' дн.</span>' +
+          '<span style="font-size:12px;">&#x1F4E5; Ещ&#1105; прид&#1105;т за ' + daysLeft + ' дн.</span>' +
           '<span style="font-weight:700;color:var(--green);">+' + fmtShort(expectedIncome) + '</span>' +
         '</div>' +
-        '<div style="font-size:11px;color:#aaa;text-align:center;margin-top:6px;">&#x261D;&#xFE0F; Введите баланс р/с для расчёта</div>' +
+        '<div style="font-size:11px;color:#aaa;text-align:center;margin-top:6px;">&#x261D;&#xFE0F; Введите баланс р/с для расч&#1105;та</div>' +
       '</div>' +
-      '<div style="font-size:10px;color:#aaa;margin-top:4px;">* приход ' + fmtShort(dailyBank) + '/день на р/с</div>' +
     '</div>';
 
   el.innerHTML =
     '<div class="card" style="background:white;border-radius:16px;padding:16px;margin-bottom:12px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<div style="font-size:14px;font-weight:700;">&#x1F4B3; Деньги на р/с</div>' +
-        '<div style="font-size:11px;color:#888;">' + dayOfMonth + '-й день · осталось ' + daysLeft + '</div>' +
+        '<div style="font-size:14px;font-weight:700;">&#x1F4B3; На р/с</div>' +
+        '<div style="font-size:11px;color:#888;">' + dayOfMonth + '-й день &#183; осталось ' + daysLeft + '</div>' +
       '</div>' +
-      '<div class="pulse-row">' +
-        '<span style="font-size:12px;">&#x1F4E5; Приход на р/с / день</span>' +
-        '<span style="font-weight:800;font-size:16px;">' + fmtShort(dailyBank) + '</span>' +
+
+      // ДОХОДЫ
+      '<div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;">&#x1F4E5; ДОХОДЫ (прогноз на месяц)</div>' +
+      '<div class="pulse-row" style="padding-left:8px;">' +
+        '<span style="font-size:12px;">атель&#1077; &#247; 2</span>' +
+        '<span style="font-weight:700;">' + fmtShort(incAtelie) + '</span>' +
       '</div>' +
-      '<div class="pulse-row" style="padding-left:16px;">' +
-        '<span style="font-size:11px;color:var(--text-3);">ателье ÷ 2</span>' +
-        '<span style="font-size:11px;color:var(--text-3);">' + fmtShort(dailyBankAtelie) + '</span>' +
+      '<div class="pulse-row" style="padding-left:8px;">' +
+        '<span style="font-size:12px;">химчистка</span>' +
+        '<span style="font-weight:700;">' + fmtShort(incHimch) + '</span>' +
       '</div>' +
-      '<div class="pulse-row" style="padding-left:16px;">' +
-        '<span style="font-size:11px;color:var(--text-3);">химчистка</span>' +
-        '<span style="font-size:11px;color:var(--text-3);">' + fmtShort(dailyBankHimch) + '</span>' +
+      (incExtra > 0
+        ? '<div class="pulse-row" style="padding-left:8px;"><span style="font-size:12px;">+ доход 100К</span><span style="font-weight:700;">' + fmtShort(incExtra) + '</span></div>'
+        : '<div class="pulse-row" style="padding-left:8px;"><span style="font-size:12px;">+ доход 100К</span><span style="font-size:11px;color:#bbb;">не получен</span></div>') +
+      '<div class="pulse-row" style="font-weight:700;margin-top:2px;">' +
+        '<span style="font-size:12px;">ИТОГО доходы</span>' +
+        '<span style="font-size:15px;color:var(--green);">' + fmtShort(totalIncome) + '</span>' +
       '</div>' +
-      '<div class="pulse-row" style="margin-top:6px;">' +
-        '<span style="font-size:12px;">&#x1F4C5; Приход за месяц (прогноз)</span>' +
-        '<span style="font-weight:700;">' + fmtShort(totalBankIncome) + '</span>' +
+
+      // РАСХОДЫ
+      '<div style="font-size:11px;font-weight:700;color:var(--red);margin-top:10px;margin-bottom:4px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.06);">&#x1F4E4; РАСХОДЫ</div>' +
+      '<div class="pulse-row" style="padding-left:8px;">' +
+        '<span style="font-size:12px;">химч подрядчикам (60%)</span>' +
+        '<span style="font-weight:600;color:var(--text-3);">&#8722;' + fmtShort(expHimch) + '</span>' +
       '</div>' +
-      '<div class="pulse-row" style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(0,0,0,0.06);">' +
-        '<span style="font-size:12px;">➖ Химч подрядчикам (60%)</span>' +
-        '<span style="font-weight:600;color:var(--text-3);">−' + fmtShort(himchCosts) + '</span>' +
+      '<div class="pulse-row" style="padding-left:8px;">' +
+        '<span style="font-size:12px;">фикс (аренда и тд)</span>' +
+        '<span style="font-weight:600;color:var(--text-3);">&#8722;' + fmtShort(FIXED_COSTS) + '</span>' +
       '</div>' +
-      '<div class="pulse-row">' +
-        '<span style="font-size:12px;">➖ Фикс (аренда и тд)</span>' +
-        '<span style="font-weight:600;color:var(--text-3);">−' + fmtShort(FIXED_COSTS) + '</span>' +
+      '<div class="pulse-row" style="padding-left:8px;">' +
+        '<span style="font-size:12px;">кредиты</span>' +
+        '<span style="font-weight:600;color:var(--text-3);">&#8722;' + fmtShort(creditsLeft) + '</span>' +
       '</div>' +
-      '<div class="pulse-row">' +
-        '<span style="font-size:12px;">➖ Кредиты</span>' +
-        '<span style="font-weight:600;color:var(--text-3);">−' + fmtShort(creditsLeft) + '</span>' +
+      '<div class="pulse-row" style="font-weight:700;margin-top:2px;">' +
+        '<span style="font-size:12px;">ИТОГО расходы</span>' +
+        '<span style="font-size:15px;color:var(--red);">&#8722;' + fmtShort(totalExpenses) + '</span>' +
       '</div>' +
-      '<div class="pulse-row" style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,0.06);">' +
-        '<span style="font-size:13px;font-weight:700;">' + fmEmoji + ' На семью (прогноз)</span>' +
-        '<span style="font-weight:900;font-size:17px;color:' + fmColor + ';">' + fmtShort(familyMoney) + '</span>' +
+
+      // НА СЕМЬЮ
+      '<div class="pulse-row" style="margin-top:10px;padding-top:8px;border-top:2px solid rgba(0,0,0,0.1);">' +
+        '<span style="font-size:14px;font-weight:800;">' + fmEmoji + ' На сем&#1100;ю</span>' +
+        '<span style="font-weight:900;font-size:20px;color:' + fmColor + ';">' + fmtShort(familyMoney) + '</span>' +
       '</div>' +
-      planHtml +
+      '<div style="font-size:10px;color:#aaa;margin-top:2px;">~' + fmtShort(dailyBank) + '/день на р/с (атель&#1077;&#247;2 + химч)</div>' +
       bufferHtml +
     '</div>';
   el.style.display = '';
 }
 
-// ── PULSE CALCULATOR (банковская перспектива) ──
-function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, himchCosts, creditsLeft) {
+// ── PULSE CALCULATOR ──
+function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, totalExpenses) {
   var el = document.getElementById('pulseCalcResult');
   if (!el) return;
   var val = parseInt(String(rawVal).replace(/\s/g, '').replace(/\D/g, ''), 10);
@@ -174,23 +173,20 @@ function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, himchCosts, c
   if (!val || val <= 0) {
     el.innerHTML =
       '<div class="pulse-row">' +
-        '<span style="font-size:12px;">&#x1F4E5; Ещё придёт за ' + daysLeft + ' дн.</span>' +
+        '<span style="font-size:12px;">&#x1F4E5; Ещ&#1105; прид&#1105;т за ' + daysLeft + ' дн.</span>' +
         '<span style="font-weight:700;color:var(--green);">+' + fmtShort(expectedIncome) + '</span>' +
       '</div>' +
-      '<div style="font-size:11px;color:#aaa;text-align:center;margin-top:6px;">&#x261D;&#xFE0F; Введите баланс р/с для расчёта</div>';
+      '<div style="font-size:11px;color:#aaa;text-align:center;margin-top:6px;">&#x261D;&#xFE0F; Введите баланс р/с</div>';
     return;
   }
-  // Сколько будет на счёту к концу месяца
   var totalByEnd = val + expectedIncome;
-  // Минус все расходы оставшиеся
-  var totalExpenses = himchCosts + FIXED_COSTS + creditsLeft;
   var canWithdraw = totalByEnd - totalExpenses;
   var cwColor = canWithdraw >= 0 ? 'var(--green)' : 'var(--red)';
   var cwText = canWithdraw >= 0 ? fmtShort(canWithdraw) : '&#x26A0;&#xFE0F; нехватка ' + fmtShort(Math.abs(canWithdraw));
   var statusEmoji = canWithdraw >= 200000 ? '&#x2705;' : canWithdraw >= 0 ? '&#x1F7E1;' : '&#x1F534;';
   el.innerHTML =
     '<div class="pulse-row">' +
-      '<span style="font-size:12px;">&#x1F4E5; Ещё придёт за ' + daysLeft + ' дн.</span>' +
+      '<span style="font-size:12px;">&#x1F4E5; Ещ&#1105; прид&#1105;т за ' + daysLeft + ' дн.</span>' +
       '<span style="font-weight:700;color:var(--green);">+' + fmtShort(expectedIncome) + '</span>' +
     '</div>' +
     '<div class="pulse-row">' +
@@ -198,11 +194,11 @@ function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, himchCosts, c
       '<span style="font-weight:700;">' + fmtShort(totalByEnd) + '</span>' +
     '</div>' +
     '<div class="pulse-row">' +
-      '<span style="font-size:12px;">➖ Расходы оставшиеся</span>' +
-      '<span style="font-weight:600;color:var(--text-3);">−' + fmtShort(totalExpenses) + '</span>' +
+      '<span style="font-size:12px;">&#x2796; Расходы</span>' +
+      '<span style="font-weight:600;color:var(--text-3);">&#8722;' + fmtShort(totalExpenses) + '</span>' +
     '</div>' +
     '<div class="pulse-row" style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,0.06);">' +
-      '<span style="font-size:13px;font-weight:700;">' + statusEmoji + ' Можно на семью</span>' +
+      '<span style="font-size:13px;font-weight:700;">' + statusEmoji + ' На сем&#1100;ю</span>' +
       '<span style="font-weight:800;font-size:17px;color:' + cwColor + ';">' + cwText + '</span>' +
     '</div>';
 }
@@ -215,7 +211,8 @@ function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, himchCosts, c
 var FIXED_COSTS = 450000;
 // Кредиты ежемесячно
 var CREDIT_PAYMENTS = 321000;
-// Маржа (на семью) = ателье × 0.5 + химч × 0.4 − фикс − кредиты
+// Доп. доход (получаем в день оплаты кредитов)
+var EXTRA_INCOME = 100000;
 
 var MONTH_NAMES_SHORT = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 var MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -226,13 +223,19 @@ function getDaysInMonth(m, y) {
   return MONTH_DAYS[m];
 }
 
-function calcMargin(atelieRev, himchRev, isCurrentMonth) {
-  // Если текущий месяц — вычитаем только неоплаченные кредиты
-  var credits = CREDIT_PAYMENTS;
-  if (isCurrentMonth && typeof getCreditsPaidTotal === 'function') {
-    credits = CREDIT_PAYMENTS - getCreditsPaidTotal();
-  }
-  return Math.round(atelieRev * 0.5 + (himchRev || 0) * 0.4 - FIXED_COSTS - credits);
+// ═══ Получить состояние доп. дохода (100К) ═══
+function getExtraIncomeKey() {
+  var now = new Date();
+  return 'dresscode_extra_income_' + now.getFullYear() + '-' + (now.getMonth() + 1);
+}
+function isExtraIncomeReceived() {
+  return localStorage.getItem(getExtraIncomeKey()) === '1';
+}
+function toggleExtraIncome() {
+  var key = getExtraIncomeKey();
+  localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1');
+  renderCreditsChecklist();
+  if (typeof renderPlanner === 'function' && state.branches) renderPlanner(state.branches);
 }
 
 function renderPlanner(data) {
@@ -260,126 +263,155 @@ function renderPlanner(data) {
   var daysInCurMonth = getDaysInMonth(curMonth, curYear);
   var daysLeft = daysInCurMonth - dayOfMonth;
 
-  // ═══ Банковская дневная скорость ═══
-  var dailyBankAtelie = Math.round(factAtelie / 2 / dayOfMonth);
-  var dailyBankHimch = Math.round(factHimch / dayOfMonth);
-  var dailyBank = dailyBankAtelie + dailyBankHimch;
-  var dailyHimchCost = Math.round(dailyBankHimch * 0.6); // 60% химч уходит подрядчикам
+  // ═══ Дневные скорости ═══
+  var dailyAtelie = Math.round(factAtelie / dayOfMonth);        // полный оборот ателье/день
+  var dailyHimch = Math.round(factHimch / dayOfMonth);           // химч/день
+  var dailyBankAtelie = Math.round(factAtelie / 2 / dayOfMonth); // на р/с (ателье÷2)
+  var dailyBankHimch = dailyHimch;                                // на р/с (химч вся)
 
-  // Кредиты (с учётом уже оплаченных)
+  // Кредиты
   var creditsPaid = typeof getCreditsPaidTotal === 'function' ? getCreditsPaidTotal() : 0;
+  var extraReceived = isExtraIncomeReceived();
 
-  // ═══ Функция «на семью» через банковские приходы ═══
-  function bankFamily(days, isCurrentMonth) {
-    var income = dailyBank * days;
-    var himchExp = dailyHimchCost * days;
-    var credits = isCurrentMonth ? (CREDIT_PAYMENTS - creditsPaid) : CREDIT_PAYMENTS;
-    return Math.round(income - himchExp - FIXED_COSTS - credits);
+  // ═══ Две базы для расчёта «на семью» ═══
+  function calcBases(days, isCurrentMonth) {
+    // ДОХОДЫ (что приходит на р/с)
+    var incAtelie = dailyBankAtelie * days;
+    var incHimch = dailyBankHimch * days;
+    var incExtra = isCurrentMonth ? (extraReceived ? EXTRA_INCOME : 0) : EXTRA_INCOME;
+    var totalIncome = incAtelie + incHimch + incExtra;
+
+    // РАСХОДЫ
+    var expHimchContractors = Math.round(dailyHimch * days * 0.6); // 60% от химч = подрядчики
+    var expFixed = FIXED_COSTS;
+    var expCredits = isCurrentMonth ? (CREDIT_PAYMENTS - creditsPaid) : CREDIT_PAYMENTS;
+    var totalExpenses = expHimchContractors + expFixed + expCredits;
+
+    return {
+      incAtelie: incAtelie,
+      incHimch: incHimch,
+      incExtra: incExtra,
+      totalIncome: totalIncome,
+      expHimch: expHimchContractors,
+      expFixed: expFixed,
+      expCredits: expCredits,
+      totalExpenses: totalExpenses,
+      family: Math.round(totalIncome - totalExpenses)
+    };
   }
 
-  // ═══════ 1. Этот месяц — экстраполяция ═══════
-  var familyCur = bankFamily(daysInCurMonth, true);
+  // ═══ Расчёты по периодам ═══
+  var cur = calcBases(daysInCurMonth, true);
 
-  // ═══════ 2. Этот месяц — ПЛАН ═══════
   var planAtelie = (t.plan && parseFloat(t.plan.atelie)) || 0;
   var planHimch = (t.plan && parseFloat(t.plan.himchistka)) || 0;
-  var familyPlan = familyCur;
+  var plan = null;
   if (planAtelie > 0) {
-    var planBankIncome = Math.round(planAtelie / 2 + planHimch);
-    var planHimchCost = Math.round(planHimch * 0.6);
-    familyPlan = Math.round(planBankIncome - planHimchCost - FIXED_COSTS - (CREDIT_PAYMENTS - creditsPaid));
-    if (familyPlan < familyCur) familyPlan = familyCur;
+    var pIncA = Math.round(planAtelie / 2);
+    var pIncH = Math.round(planHimch);
+    var pIncE = extraReceived ? EXTRA_INCOME : 0;
+    var pExpH = Math.round(planHimch * 0.6);
+    var pTotInc = pIncA + pIncH + pIncE;
+    var pTotExp = pExpH + FIXED_COSTS + (CREDIT_PAYMENTS - creditsPaid);
+    plan = { totalIncome: pTotInc, totalExpenses: pTotExp, family: Math.round(pTotInc - pTotExp), incAtelie: pIncA, incHimch: pIncH };
+    if (plan.family <= cur.family) plan = null; // план не лучше факта — не показываем
   }
 
-  // ═══════ 3. Следующий месяц ═══════
   var nextMonth = (curMonth + 1) % 12;
   var nextYear = curMonth === 11 ? curYear + 1 : curYear;
   var daysInNextMonth = getDaysInMonth(nextMonth, nextYear);
-  var familyNext = bankFamily(daysInNextMonth, false);
+  var nxt = calcBases(daysInNextMonth, false);
 
-  // ═══════ 4. Три месяца вперёд ═══════
   var family3Sum = 0;
-  var months3Details = [];
+  var months3 = [];
   for (var i = 1; i <= 3; i++) {
     var mi = (curMonth + i) % 12;
     var yi = curMonth + i > 11 ? curYear + 1 : curYear;
     var diM = getDaysInMonth(mi, yi);
-    var fam = bankFamily(diM, false);
-    family3Sum += fam;
-    months3Details.push({ month: mi, days: diM, income: dailyBank * diM, family: fam });
+    var m = calcBases(diM, false);
+    family3Sum += m.family;
+    months3.push({ month: mi, days: diM, income: m.totalIncome, expenses: m.totalExpenses, family: m.family });
   }
 
-  // ═══════ RENDER ═══════
+  // ═══ RENDER ═══
+  var capMonth = function(m) { return MONTH_NAMES_SHORT[m].charAt(0).toUpperCase() + MONTH_NAMES_SHORT[m].slice(1); };
+
   var bigNum = function(val) {
     var color = val >= 0 ? 'var(--green)' : 'var(--red)';
     return '<span style="font-weight:900;font-size:20px;color:' + color + ';">' + fmtShort(val) + '</span>';
   };
 
-  var row = function(label, val, bold) {
+  var row = function(label, val, isNeg) {
     var display = typeof val === 'string' ? val : fmtShort(val);
-    var style = bold ? 'font-weight:700;' : 'font-weight:600;';
+    var color = isNeg ? 'color:var(--red);' : '';
     return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);padding:2px 0;">' +
-      '<span>' + label + '</span><span style="' + style + '">' + display + '</span></div>';
+      '<span>' + label + '</span><span style="font-weight:600;' + color + '">' + display + '</span></div>';
   };
 
-  var cardBlock = function(emoji, title, subtitle, marginVal, details) {
-    var statusEmoji = marginVal >= 200000 ? '✅' : marginVal >= 0 ? '🟡' : '🔴';
+  // Детали с двумя базами
+  function detailBlock(b, showExtra) {
+    var html = '<div style="margin-top:6px;padding:6px 0;">';
+    // ДОХОДЫ
+    html += '<div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:2px;">ДОХОДЫ</div>';
+    html += row('  ателье ÷ 2', fmtShort(b.incAtelie));
+    html += row('  химчистка', fmtShort(b.incHimch));
+    if (showExtra && b.incExtra > 0) html += row('  + доход 100К', fmtShort(b.incExtra));
+    else if (showExtra && b.incExtra === 0) html += row('  + доход 100К', '⬜ не получен');
+    html += row('  ИТОГО', fmtShort(b.totalIncome));
+    // РАСХОДЫ
+    html += '<div style="font-size:10px;font-weight:700;color:var(--red);margin-top:4px;margin-bottom:2px;">РАСХОДЫ</div>';
+    html += row('  химч подрядчикам (60%)', '−' + fmtShort(b.expHimch));
+    html += row('  фикс (аренда и тд)', '−' + fmtShort(b.expFixed));
+    html += row('  кредиты', '−' + fmtShort(b.expCredits));
+    html += row('  ИТОГО', '−' + fmtShort(b.totalExpenses));
+    html += '</div>';
+    return html;
+  }
+
+  function cardBlock(emoji, title, subtitle, familyVal, detailsHtml) {
+    var statusEmoji = familyVal >= 200000 ? '&#x2705;' : familyVal >= 0 ? '&#x1F7E1;' : '&#x1F534;';
     return '<div class="planner-block">' +
       '<div class="planner-block-head">' +
         '<div><div style="font-size:13px;font-weight:700;">' + emoji + ' ' + title + '</div>' +
         '<div style="font-size:10px;color:var(--text-3);margin-top:1px;">' + subtitle + '</div></div>' +
-        '<div style="text-align:right;">' + bigNum(marginVal) + '<div style="font-size:9px;color:var(--text-3);margin-top:1px;">' + statusEmoji + ' на семью</div></div>' +
+        '<div style="text-align:right;">' + bigNum(familyVal) + '<div style="font-size:9px;color:var(--text-3);margin-top:1px;">' + statusEmoji + ' на семью</div></div>' +
       '</div>' +
-      (details || '') +
+      (detailsHtml || '') +
     '</div>';
-  };
-
-  var capMonth = function(m) { return MONTH_NAMES_SHORT[m].charAt(0).toUpperCase() + MONTH_NAMES_SHORT[m].slice(1); };
-
-  // Детали текущий месяц
-  var bankIncomeMonth = dailyBank * daysInCurMonth;
-  var himchCostMonth = dailyHimchCost * daysInCurMonth;
-  var curCredits = CREDIT_PAYMENTS - creditsPaid;
-  var detailsCur =
-    row('💳 Приход на р/с', fmtShort(bankIncomeMonth) + ' (' + fmtShort(dailyBank) + '/день)') +
-    row('   ← ателье ÷ 2', fmtShort(dailyBankAtelie * daysInCurMonth)) +
-    row('   ← химчистка', fmtShort(dailyBankHimch * daysInCurMonth)) +
-    row('➖ Химч подрядчикам', '−' + fmtShort(himchCostMonth)) +
-    row('➖ Фикс', '−' + fmtShort(FIXED_COSTS)) +
-    row('➖ Кредиты', '−' + fmtShort(curCredits));
-
-  // Детали план
-  var detailsPlan = familyPlan > familyCur
-    ? row('По плану приход на р/с', fmtShort(Math.round(planAtelie / 2 + planHimch))) + row('Разница с текущим', '+' + fmtShort(familyPlan - familyCur))
-    : '<div style="font-size:11px;color:var(--text-3);padding:2px 0;">= совпадает с экстраполяцией</div>';
-
-  // Детали след. месяц
-  var detailsNext =
-    row('💳 Приход на р/с', fmtShort(dailyBank * daysInNextMonth)) +
-    row('➖ Расходы', '−' + fmtShort(dailyHimchCost * daysInNextMonth + FIXED_COSTS + CREDIT_PAYMENTS)) +
-    row('Скорость', fmtShort(dailyBank) + '/день');
+  }
 
   // Детали 3 месяца
   var details3 = '';
-  months3Details.forEach(function(d) {
+  months3.forEach(function(d) {
     var mColor = d.family >= 0 ? 'var(--green)' : 'var(--red)';
     details3 += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">' +
       '<span style="color:var(--text-3);">' + capMonth(d.month) + ' (' + d.days + 'д)</span>' +
-      '<span><span style="color:var(--text-3);margin-right:8px;">р/с ' + fmtShort(d.income) + '</span><span style="font-weight:700;color:' + mColor + ';">' + fmtShort(d.family) + '</span></span></div>';
+      '<span><span style="color:var(--text-3);margin-right:6px;">+' + fmtShort(d.income) + '</span>' +
+      '<span style="color:var(--text-3);margin-right:6px;">−' + fmtShort(d.expenses) + '</span>' +
+      '<span style="font-weight:700;color:' + mColor + ';">' + fmtShort(d.family) + '</span></span></div>';
   });
 
-  el.innerHTML =
-    '<div class="card" style="border-radius:16px;padding:16px;margin-bottom:12px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-        '<div style="font-size:14px;font-weight:800;">💰 На семью</div>' +
-        '<div style="font-size:10px;color:var(--text-3);background:var(--surface-2);padding:3px 8px;border-radius:6px;font-weight:600;">от р/с · после расходов</div>' +
-      '</div>' +
-      '<div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">На р/с: <strong style="color:var(--text);">~' + fmtShort(dailyBank) + '/день</strong> (ателье÷2 ' + fmtShort(dailyBankAtelie) + ' + химч ' + fmtShort(dailyBankHimch) + ')</div>' +
-      cardBlock('📌', capMonth(curMonth) + ' (факт)', dayOfMonth + ' дней · ' + fmtShort(dailyBank) + '/день на р/с', familyCur, detailsCur) +
-      cardBlock('📈', capMonth(curMonth) + ' (план)', 'если выполним план', familyPlan, detailsPlan) +
-      cardBlock('📆', capMonth(nextMonth), daysInNextMonth + ' дней · та же скорость', familyNext, detailsNext) +
-      cardBlock('📊', '3 месяца', capMonth((curMonth+1)%12) + '–' + capMonth((curMonth+3)%12) + ' суммарно', family3Sum, details3) +
-    '</div>';
+  var dailyBank = dailyBankAtelie + dailyBankHimch;
+
+  var html = '<div class="card" style="border-radius:16px;padding:16px;margin-bottom:12px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+    '<div style="font-size:14px;font-weight:800;">&#x1F4B0; На семью</div>' +
+    '<div style="font-size:10px;color:var(--text-3);background:var(--surface-2);padding:3px 8px;border-radius:6px;font-weight:600;">доходы − расходы</div>' +
+  '</div>';
+  html += '<div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">На р/с: <strong style="color:var(--text);">~' + fmtShort(dailyBank) + '/день</strong> (ателье&#247;2 ' + fmtShort(dailyBankAtelie) + ' + химч ' + fmtShort(dailyBankHimch) + ')</div>';
+
+  html += cardBlock('&#x1F4CC;', capMonth(curMonth) + ' (факт)', dayOfMonth + ' дней &#183; ' + fmtShort(dailyBank) + '/день', cur.family, detailBlock(cur, true));
+  if (plan) {
+    html += cardBlock('&#x1F4C8;', capMonth(curMonth) + ' (план)', 'если выполним план', plan.family,
+      row('&#x1F4E5; Доходы по плану', fmtShort(plan.totalIncome)) +
+      row('&#x1F4E4; Расходы', '&#8722;' + fmtShort(plan.totalExpenses)) +
+      row('Разница с текущим', '+' + fmtShort(plan.family - cur.family)));
+  }
+  html += cardBlock('&#x1F4C6;', capMonth(nextMonth), daysInNextMonth + ' дней &#183; та же скорость', nxt.family, detailBlock(nxt, false));
+  html += cardBlock('&#x1F4CA;', '3 месяца', capMonth((curMonth+1)%12) + '&#8211;' + capMonth((curMonth+3)%12) + ' суммарно', family3Sum, details3);
+
+  html += '</div>';
+  el.innerHTML = html;
   el.style.display = '';
 }
 
