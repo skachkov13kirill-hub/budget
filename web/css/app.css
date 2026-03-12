@@ -615,6 +615,22 @@ body {
   font-size: 14px; padding: 6px 0; color: var(--green);
 }
 .margin-divider { border-top: 1px dashed #E0E0E0; margin: 6px 0; }
+.pulse-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0;
+}
+
+/* ===== PLANNER BLOCKS ===== */
+.planner-block {
+  background: var(--surface-2); border-radius: var(--r-sm);
+  padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.planner-block:last-child { margin-bottom: 0; }
+.planner-block-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 6px;
+}
 .margin-row {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 13px; padding: 4px 0;

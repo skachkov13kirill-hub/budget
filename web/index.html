@@ -93,7 +93,7 @@
       <div style="text-align:center;font-size:16px;font-weight:700;margin-bottom:14px;">Сеть из 10 ателье</div>
       <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
         <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('atelie')"><div class="stat-label">Ателье &#x25B8;</div><div class="stat-value" id="ov-atelie">&mdash;</div><div class="stat-sub" id="ov-atelie-plan"></div></div>
-        <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('himch')"><div class="stat-label">Ср. чек &#x25B8;</div><div class="stat-value" id="ov-himch">&mdash;</div><div class="stat-sub" id="ov-himch-plan"></div></div>
+        <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('avgcheck')"><div class="stat-label">Ср. чек &#x25B8;</div><div class="stat-value" id="ov-himch">&mdash;</div><div class="stat-sub" id="ov-himch-plan"></div></div>
         <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('total')"><div class="stat-label">Всего &#x25B8;</div><div class="stat-value" id="ov-total">&mdash;</div><div class="stat-sub" id="ov-total-plan"></div></div>
         <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('clients')"><div class="stat-label">Клиенты &#x25B8;</div><div class="stat-value" id="ov-clients">&mdash;</div><div class="stat-sub" id="ov-avg-check"></div></div>
         <div class="stat-box" style="cursor:pointer;" onclick="openNetworkDetail('profit')"><div class="stat-label">Прибыль &#x25B8;</div><div class="stat-value" id="ov-profit">&mdash;</div><div class="stat-sub">чистая</div></div>
@@ -106,6 +106,8 @@
       <div class="progress-wrap"><div class="progress-fill" id="ov-progress" style="width:0%">0%</div></div>
     </div>
   </div>
+  <div id="dailyPulseCard" style="display:none;"></div>
+  <div id="plannerCard" style="display:none;"></div>
   <div id="realMarginCard" style="display:none;"></div>
   <div id="filialsGrid"></div>
 </div>
