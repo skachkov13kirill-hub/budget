@@ -37,9 +37,6 @@ function renderBizOverview(data) {
   // Пульс дня
   renderDailyPulse(data);
 
-  // Реальная маржа (Этап 2)
-  renderRealMargin(data);
-
   // Планировщик — 4 цифры маржи
   renderPlanner(data);
 }
@@ -226,8 +223,13 @@ function getDaysInMonth(m, y) {
   return MONTH_DAYS[m];
 }
 
-function calcMargin(atelieRev, himchRev) {
-  return Math.round(atelieRev * 0.5 + (himchRev || 0) * 0.4 - FIXED_COSTS - CREDIT_PAYMENTS);
+function calcMargin(atelieRev, himchRev, isCurrentMonth) {
+  // Если текущий месяц — вычитаем только неоплаченные кредиты
+  var credits = CREDIT_PAYMENTS;
+  if (isCurrentMonth && typeof getCreditsPaidTotal === 'function') {
+    credits = CREDIT_PAYMENTS - getCreditsPaidTotal();
+  }
+  return Math.round(atelieRev * 0.5 + (himchRev || 0) * 0.4 - FIXED_COSTS - credits);
 }
 
 function renderPlanner(data) {
@@ -265,12 +267,12 @@ function renderPlanner(data) {
   // ═══════ 1. Этот месяц — экстраполяция факта ═══════
   var projAtelie = factAtelie + avgDailyAtelie * daysLeft;
   var projHimch = factHimch + avgDailyHimch * daysLeft;
-  var marginCur = calcMargin(projAtelie, projHimch);
+  var marginCur = calcMargin(projAtelie, projHimch, true);
 
   // ═══════ 2. Этот месяц — ПЛАН (если есть в API и больше экстраполяции) ═══════
   var planAtelie = (t.plan && parseFloat(t.plan.atelie)) || 0;
   var planHimch = (t.plan && parseFloat(t.plan.himchistka)) || 0;
-  var marginPlan = (planAtelie > 0) ? calcMargin(Math.max(projAtelie, planAtelie), Math.max(projHimch, planHimch)) : marginCur;
+  var marginPlan = (planAtelie > 0) ? calcMargin(Math.max(projAtelie, planAtelie), Math.max(projHimch, planHimch), true) : marginCur;
 
   // ═══════ 3. Следующий месяц — та же дневная скорость ═══════
   var nextMonth = (curMonth + 1) % 12;
@@ -324,7 +326,8 @@ function renderPlanner(data) {
     smallDetail('Приход на р/с ≈', Math.round(projAtelie / 2)) +
     smallDetail('Ателье (оборот)', projAtelie) +
     smallDetail('Химчистка', projHimch) +
-    smallDetail('Расходы', '−' + fmtShort(FIXED_COSTS + CREDIT_PAYMENTS));
+    smallDetail('Фикс', '−' + fmtShort(FIXED_COSTS)) +
+    smallDetail('Кредиты', '−' + fmtShort(CREDIT_PAYMENTS - (typeof getCreditsPaidTotal === 'function' ? getCreditsPaidTotal() : 0)));
 
   // Детали план
   var detailsPlan = marginPlan > marginCur
@@ -354,7 +357,7 @@ function renderPlanner(data) {
         '<div style="font-size:14px;font-weight:800;">💰 На семью</div>' +
         '<div style="font-size:10px;color:var(--text-3);background:var(--surface-2);padding:3px 8px;border-radius:6px;font-weight:600;">после всех расходов</div>' +
       '</div>' +
-      '<div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">На р/с: <strong style="color:var(--text);">~' + fmtShort(avgDailyBank) + '/день</strong> · расходы ' + fmtShort(FIXED_COSTS) + ' + кредиты ' + fmtShort(CREDIT_PAYMENTS) + '</div>' +
+      '<div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">На р/с: <strong style="color:var(--text);">~' + fmtShort(avgDailyBank) + '/день</strong> · фикс ' + fmtShort(FIXED_COSTS) + ' + кредиты ' + fmtShort(CREDIT_PAYMENTS - (typeof getCreditsPaidTotal === 'function' ? getCreditsPaidTotal() : 0)) + '</div>' +
       cardBlock('📌', capMonth(curMonth) + ' (факт)', 'экстраполяция текущей скорости', marginCur, detailsCur) +
       cardBlock('📈', capMonth(curMonth) + ' (план)', 'если выполним план', marginPlan, detailsPlan) +
       cardBlock('📆', capMonth(nextMonth), 'при той же скорости', marginNext, detailsNext) +

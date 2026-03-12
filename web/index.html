@@ -39,7 +39,6 @@
     <div class="free-money-title">&#x1F4B0; Свободные деньги</div>
     <div style="font-size:13px;opacity:0.5;margin-top:8px;">Загрузка данных...</div>
   </div>
-  <div id="healthBadgeHome"></div>
   <div class="mini-cards">
     <div class="mini-card" id="miniCardBiz" onclick="switchTab('business',document.getElementById('nav-business'))">
       <div class="mini-card-icon">&#x1F3E2;</div>
@@ -53,24 +52,11 @@
       <div class="mini-card-value">&mdash;</div>
       <div class="mini-card-sub">загрузка...</div>
     </div>
-    <div class="mini-card" id="miniCardCredits" onclick="openCreditsOverlay()">
-      <div class="mini-card-icon">&#x1F4B3;</div>
-      <div class="mini-card-label">Кредиты</div>
-      <div class="mini-card-value">&mdash;</div>
-      <div class="mini-card-sub">загрузка...</div>
-    </div>
   </div>
-  <div id="advisorTipsHome" style="display:none;"></div>
-  <div id="patternsCard" style="display:none;"></div>
-  <div class="card priority-card" id="card-payments">
-    <div class="card-header">&#x1F4B3; Платежи &mdash; <span id="payMonthName">март</span></div>
-    <div id="paymentsContent"><div class="loading-box"><div class="spinner"></div></div></div>
+  <div class="card" id="card-credits">
+    <div class="card-header">&#x1F4B3; Кредиты &mdash; <span id="creditsMonthName">март</span></div>
+    <div id="creditsChecklist"><div class="loading-box"><div class="spinner"></div></div></div>
   </div>
-  <div class="card" id="card-forecast" style="display:none;">
-    <div class="card-header" style="justify-content:space-between;">&#x1F52E; Хватит ли денег?<span class="fc-gear" onclick="openForecastSettings()">&#x2699;&#xFE0F;</span></div>
-    <div id="forecastContent"></div>
-  </div>
-  <div id="storiesButton" style="display:none;"></div>
 </div>
 
 <!-- TAB: БИЗНЕС -->
@@ -108,7 +94,6 @@
   </div>
   <div id="dailyPulseCard" style="display:none;"></div>
   <div id="plannerCard" style="display:none;"></div>
-  <div id="realMarginCard" style="display:none;"></div>
   <div id="filialsGrid"></div>
 </div>
 
@@ -150,7 +135,5 @@
 <script src="js/business.js"></script>
 <script src="js/family.js"></script>
 <script src="js/family-features.js"></script>
-<script src="js/advisor.js"></script>
-<script src="js/stories.js"></script>
 </body>
 </html>

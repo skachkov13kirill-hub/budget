@@ -6,12 +6,7 @@
 function renderOverview() {
   renderFreeMoney();
   renderMiniCards();
-  renderPaymentsCard();
-  renderForecastWidget();
-  if (typeof renderHealthBadge === 'function') renderHealthBadge();
-  if (typeof renderAdvisorHome === 'function') renderAdvisorHome();
-  if (typeof renderPatternsCard === 'function') renderPatternsCard();
-  if (typeof renderStoriesButton === 'function') renderStoriesButton();
+  renderCreditsChecklist();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -94,6 +89,99 @@ function renderMiniCards() {
 // ═══════════════════════════════════════════════════════════════
 // PAYMENTS CARD
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// CREDITS CHECKLIST — галочки оплаченных кредитов
+// ═══════════════════════════════════════════════════════════════
+function getCreditsCheckKey() {
+  var now = new Date();
+  return 'dresscode_credits_paid_' + now.getFullYear() + '-' + (now.getMonth() + 1);
+}
+
+function getCreditsChecked() {
+  try { return JSON.parse(localStorage.getItem(getCreditsCheckKey()) || '{}'); } catch(e) { return {}; }
+}
+
+function toggleCreditPaid(idx) {
+  var checked = getCreditsChecked();
+  if (checked[idx]) delete checked[idx]; else checked[idx] = true;
+  localStorage.setItem(getCreditsCheckKey(), JSON.stringify(checked));
+  renderCreditsChecklist();
+  // Обновить планировщик если он на экране
+  if (typeof renderPlanner === 'function' && state.branches) {
+    renderPlanner(state.branches);
+  }
+}
+
+function getCreditsPaidTotal() {
+  if (!state.credits || !state.credits.length) return 0;
+  var checked = getCreditsChecked();
+  var paid = 0;
+  state.credits.forEach(function(cr, i) {
+    if (cr.status === 'Заморожен') return;
+    if (checked[i]) paid += (parseFloat(cr.payment) || 0);
+  });
+  return paid;
+}
+
+function renderCreditsChecklist() {
+  var el = document.getElementById('creditsChecklist');
+  var monthEl = document.getElementById('creditsMonthName');
+  if (!el) return;
+
+  var now = new Date();
+  var cm = now.getMonth() + 1;
+  if (monthEl) monthEl.textContent = MONTH_NAMES[cm];
+
+  if (!state.credits || !state.credits.length) {
+    el.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:10px 0;">Нет данных</div>';
+    return;
+  }
+
+  var checked = getCreditsChecked();
+  var payments = [];
+  state.credits.forEach(function(cr, i) {
+    if (cr.status === 'Заморожен') return;
+    var day = parseInt(cr.paymentDay) || parseInt(cr.paymentDate) || 0;
+    if (day === 0) {
+      var dm = String(cr.paymentDate || '').match(/(\d{1,2})/);
+      if (dm) day = parseInt(dm[1]);
+    }
+    payments.push({
+      idx: i,
+      name: cr.name || cr.Кредитор || 'Кредит',
+      amount: parseFloat(cr.payment) || 0,
+      day: day,
+      paid: !!checked[i]
+    });
+  });
+
+  payments.sort(function(a, b) { return a.day - b.day; });
+
+  var totalAll = 0, totalPaid = 0;
+  var html = '';
+
+  payments.forEach(function(p) {
+    totalAll += p.amount;
+    if (p.paid) totalPaid += p.amount;
+
+    html += '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;" onclick="toggleCreditPaid(' + p.idx + ')">' +
+      '<div style="font-size:20px;cursor:pointer;flex-shrink:0;">' + (p.paid ? '✅' : '⬜') + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:600;' + (p.paid ? 'text-decoration:line-through;opacity:0.5;' : '') + '">' + p.name + '</div>' +
+        '<div style="font-size:11px;color:var(--text-3);">' + (p.day || '—') + ' число</div>' +
+      '</div>' +
+      '<div style="font-size:14px;font-weight:700;' + (p.paid ? 'opacity:0.4;' : '') + '">' + fmtShort(p.amount) + '</div>' +
+    '</div>';
+  });
+
+  var remaining = totalAll - totalPaid;
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:10px;font-weight:600;">' +
+    '<span style="color:var(--green);">✅ Оплачено: ' + fmtShort(totalPaid) + '</span>' +
+    '<span style="color:var(--text-3);">⏳ Осталось: ' + fmtShort(remaining) + '</span></div>';
+
+  el.innerHTML = html;
+}
+
 function renderPaymentsCard() {
   var el = document.getElementById('paymentsContent');
   var monthName = document.getElementById('payMonthName');
