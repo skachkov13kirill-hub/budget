@@ -72,18 +72,6 @@ function renderMiniCards() {
   famCard.querySelector('.mini-card-value').textContent = fmtShort(famSpent);
   famCard.querySelector('.mini-card-sub').textContent = familyData.transactions.length + ' операций';
 
-  // Credits
-  var credCard = document.getElementById('miniCardCredits');
-  var totalDebt = 0;
-  var monthlyPay = 0;
-  (state.credits || []).forEach(function(cr) {
-    totalDebt += (parseFloat(cr.balanceCurrent || cr.balance) || 0);
-    if (cr.status === 'Активный' || !cr.status) {
-      monthlyPay += (parseFloat(cr.payment) || 0);
-    }
-  });
-  credCard.querySelector('.mini-card-value').textContent = fmtShort(totalDebt);
-  credCard.querySelector('.mini-card-sub').textContent = fmtShort(monthlyPay) + '/мес';
 }
 
 // ═══════════════════════════════════════════════════════════════
