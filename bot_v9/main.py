@@ -21,7 +21,7 @@ from telegram.ext import (
     CallbackQueryHandler, filters
 )
 
-from config import BOT_TOKEN, OPENAI_API_KEY, ANTHROPIC_API_KEY, BRANCH_NAMES
+from config import BOT_TOKEN, OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, BRANCH_NAMES
 import utils
 from utils import logger, branch_chats, load_owner
 from handlers import (
@@ -43,8 +43,8 @@ def main():
         print("\n❌ ОШИБКА: Вставь токен бота в config.py\n")
         return
 
-    voice_ok = bool(OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_KEY")
-    ai_ok = bool(ANTHROPIC_API_KEY and ANTHROPIC_API_KEY != "YOUR_ANTHROPIC_KEY")
+    voice_ok = bool((GROQ_API_KEY and GROQ_API_KEY != "YOUR_GROQ_KEY") or (OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_KEY"))
+    ai_ok = bool((GROQ_API_KEY and GROQ_API_KEY != "YOUR_GROQ_KEY") or (ANTHROPIC_API_KEY and ANTHROPIC_API_KEY != "YOUR_ANTHROPIC_KEY"))
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -94,8 +94,8 @@ def main():
     print("=" * 55)
     print(f"\nOwner: {utils.owner_chat_id or 'Первый /start'}")
     print(f"Чаты филиалов: {len(branch_chats)}/{len(BRANCH_NAMES)}")
-    print(f"🎤 Whisper: {'✅ ГОТОВ' if voice_ok else '❌ нужен OPENAI_API_KEY'}")
-    print(f"🧠 Claude Haiku: {'✅ ГОТОВ' if ai_ok else '❌ нужен ANTHROPIC_API_KEY'}")
+    print(f"🎤 Whisper: {'✅ ГОТОВ (Groq)' if voice_ok else '❌ нужен API KEY'}")
+    print(f"🧠 Claude Haiku: {'✅ ГОТОВ (Groq Llama)' if ai_ok else '❌ нужен API KEY'}")
     if not voice_ok or not ai_ok:
         print("\n⚠️  Добавь ключи в config.py и перезапусти бота")
         print("   OPENAI_API_KEY — platform.openai.com")

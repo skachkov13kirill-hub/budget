@@ -50,9 +50,14 @@ async def write_branch_daily(branch: str, turnover: int, clients: int) -> dict:
         'clients': clients
     })
 
-async def get_branches_data() -> dict:
-    """Получает данные по всем филиалам за сегодня"""
-    return await sheets_get('getBranches')
+async def get_branches_data(date: str = None, period: str = None) -> dict:
+    """Получает данные по всем филиалам. Опционально за конкретную дату/период."""
+    params = {}
+    if date:
+        params['date'] = date
+    if period:
+        params['period'] = period
+    return await sheets_get('getBranches', params if params else None)
 
 async def add_task_to_sheets(task_text: str) -> dict:
     """Добавляет задачу в лист ЗАДАЧИ"""
@@ -65,3 +70,40 @@ async def add_task_to_sheets(task_text: str) -> dict:
 async def get_tasks_from_sheets() -> dict:
     """Получает список задач из листа ЗАДАЧИ"""
     return await sheets_get('getTasks')
+
+
+# ════════════════════════════════════════
+# ПЛАНИРОВЩИК (лист ПЛАН)
+# ════════════════════════════════════════
+
+async def add_schedule_slot(date: str, name: str, start_time: str = '',
+                            end_time: str = '', duration: int = 60,
+                            category: str = '') -> dict:
+    """Добавляет слот в расписание"""
+    return await sheets_post('addScheduleSlot', {
+        'date': date,
+        'name': name,
+        'startTime': start_time,
+        'endTime': end_time,
+        'duration': duration,
+        'category': category,
+        'source': 'voice'
+    })
+
+async def get_schedule_day(date: str) -> dict:
+    """Получает расписание на конкретный день"""
+    return await sheets_get('getScheduleDay', {'date': date})
+
+async def get_schedule_week(week_start: str) -> dict:
+    """Получает расписание на неделю"""
+    return await sheets_get('getScheduleWeek', {'weekStart': week_start})
+
+async def update_schedule_slot(row: int, action: str = 'update',
+                               field: str = '', value=None) -> dict:
+    """Обновляет слот (done/delete/update поле)"""
+    data = {'row': row, 'action': action}
+    if field:
+        data['field'] = field
+    if value is not None:
+        data['value'] = value
+    return await sheets_post('updateScheduleSlot', data)

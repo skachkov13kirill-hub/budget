@@ -15,7 +15,7 @@ from config import (
     CREDITS, ACCOUNTS, RENT,
     MARGIN_FORECAST,
     SUBLEASE_TOTAL, BRANCH_NAMES,
-    OPENAI_API_KEY, ANTHROPIC_API_KEY
+    OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY
 )
 import utils
 from utils import (
@@ -24,9 +24,11 @@ from utils import (
     get_today_str, get_today_display,
     parse_branch_report, save_branch_chats, save_owner, load_owner
 )
+from datetime import datetime, timedelta
 from sheets_api import (
     write_branch_daily, get_branches_data,
-    add_task_to_sheets, get_tasks_from_sheets
+    add_task_to_sheets, get_tasks_from_sheets,
+    add_schedule_slot, get_schedule_day, update_schedule_slot
 )
 from ai_handlers import transcribe_voice, parse_intent
 from financial import (
@@ -53,11 +55,15 @@ async def handle_intent(intent: dict, update: Update, ctx: ContextTypes.DEFAULT_
     # ── БИЗНЕС ──
     if module == "business":
         if action == "query_today":
-            await handle_query_business_today(update, ctx)
+            date = params.get("date", "сегодня")
+            period = params.get("period", "day")
+            await handle_query_business_today(update, ctx, date=date, period=period)
             return
 
         if action == "query_branch":
-            await handle_query_branch(update, ctx, params.get("branch", ""))
+            date = params.get("date", "сегодня")
+            period = params.get("period", "day")
+            await handle_query_branch(update, ctx, params.get("branch", ""), date=date, period=period)
             return
 
         if action == "record_revenue":
@@ -85,6 +91,21 @@ async def handle_intent(intent: dict, update: Update, ctx: ContextTypes.DEFAULT_
 
         if action == "list_tasks":
             await handle_list_tasks(update, ctx)
+            return
+
+    # ── ПЛАНИРОВЩИК ──
+    if module == "planner":
+        if action == "add_slot":
+            await handle_planner_add(update, ctx, params)
+            return
+        if action == "list_day":
+            await handle_planner_list_day(update, ctx, params)
+            return
+        if action == "move_slot":
+            await handle_planner_move(update, ctx, params)
+            return
+        if action == "done_slot":
+            await handle_planner_done(update, ctx, params)
             return
 
     # ── ФИНАНСЫ — передаём в process_smart ──
@@ -117,11 +138,56 @@ async def handle_intent(intent: dict, update: Update, ctx: ContextTypes.DEFAULT_
 # ОБРАБОТЧИКИ БИЗНЕС-ЗАПРОСОВ
 # ════════════════════════════════════════
 
-async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """«Какой оборот сегодня?» → запрос к Apps Script"""
-    msg = await update.message.reply_text("⏳ Запрашиваю данные...")
+def _resolve_business_date(date_text: str) -> str:
+    """Конвертирует 'вчера', 'позавчера' → YYYY-MM-DD для бизнес-запросов"""
+    if not date_text or date_text == 'сегодня':
+        return datetime.now().strftime('%Y-%m-%d')
+    t = date_text.lower().strip()
+    if t == 'вчера':
+        return (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    if t == 'позавчера':
+        return (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+    # Дни недели
+    for name, wd in WEEKDAY_MAP.items():
+        if name in t:
+            today = datetime.now()
+            today_wd = today.weekday()
+            delta = (today_wd - wd) % 7
+            if delta == 0:
+                delta = 7
+            return (today - timedelta(days=delta)).strftime('%Y-%m-%d')
+    # ISO дата
+    if re.match(r'\d{4}-\d{2}-\d{2}', t):
+        return t[:10]
+    return datetime.now().strftime('%Y-%m-%d')
 
-    data = await get_branches_data()
+
+def _period_label(period: str, date_str: str) -> str:
+    """Формирует человеческое описание периода"""
+    if period == 'week':
+        return 'неделю'
+    if period == 'month':
+        return 'месяц'
+    # day — показываем дату
+    dt = datetime.strptime(date_str, '%Y-%m-%d')
+    today = datetime.now().strftime('%Y-%m-%d')
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    if date_str == today:
+        return f'сегодня ({dt.strftime("%d.%m")})'
+    if date_str == yesterday:
+        return f'вчера ({dt.strftime("%d.%m")})'
+    day_name = DAY_NAMES_RU.get(dt.weekday(), '')
+    return f'{day_name} {dt.strftime("%d.%m")}'
+
+
+async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
+                                       date: str = 'сегодня', period: str = 'day'):
+    """«Какой оборот сегодня/вчера/за неделю?» → запрос к Apps Script"""
+    date_str = _resolve_business_date(date)
+    label = _period_label(period, date_str)
+    msg = await update.message.reply_text(f"⏳ Запрашиваю данные за {label}...")
+
+    data = await get_branches_data(date=date_str, period=period)
 
     if not data or not data.get('success'):
         await msg.edit_text(
@@ -131,21 +197,21 @@ async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_
         return
 
     branches = data.get('branches', data.get('data', []))
-    today = get_today_display()
 
     if not branches:
-        await msg.edit_text(f"📊 Данных за сегодня ({today}) ещё нет.")
+        await msg.edit_text(f"📊 Данных за {label} ещё нет.")
         return
 
     # Формируем сводку
-    total_turnover = sum(b.get('today', 0) or 0 for b in branches)
-    total_clients = sum(b.get('todayClients', 0) or 0 for b in branches)
+    # Поддерживаем как 'today' (для совместимости) так и 'turnover'
+    total_turnover = sum(b.get('today', b.get('turnover', 0)) or 0 for b in branches)
+    total_clients = sum(b.get('todayClients', b.get('clients', 0)) or 0 for b in branches)
 
-    lines = [f"📊 *Сводка за {today}:*\n"]
+    lines = [f"📊 *Сводка за {label}:*\n"]
     for b in branches:
         name = b.get('name', b.get('branch', '—'))
-        t = b.get('today', 0) or 0
-        c = b.get('todayClients', 0) or 0
+        t = b.get('today', b.get('turnover', 0)) or 0
+        c = b.get('todayClients', b.get('clients', 0)) or 0
         if t > 0:
             lines.append(f"• *{name}:* {fmt_short(t)} | {c} кл.")
         else:
@@ -156,11 +222,14 @@ async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_
     await msg.edit_text('\n'.join(lines), parse_mode='Markdown')
 
 
-async def handle_query_branch(update: Update, ctx: ContextTypes.DEFAULT_TYPE, branch_name: str):
+async def handle_query_branch(update: Update, ctx: ContextTypes.DEFAULT_TYPE, branch_name: str,
+                               date: str = 'сегодня', period: str = 'day'):
     """«Как дела у М16?» → данные конкретного филиала"""
-    msg = await update.message.reply_text(f"⏳ Запрашиваю {branch_name}...")
+    date_str = _resolve_business_date(date)
+    label = _period_label(period, date_str)
+    msg = await update.message.reply_text(f"⏳ Запрашиваю {branch_name} за {label}...")
 
-    data = await get_branches_data()
+    data = await get_branches_data(date=date_str, period=period)
 
     if not data or not data.get('success'):
         await msg.edit_text("⚠️ Не удалось получить данные.")
@@ -177,17 +246,17 @@ async def handle_query_branch(update: Update, ctx: ContextTypes.DEFAULT_TYPE, br
         return
 
     name = branch.get('name', branch.get('branch', branch_name))
-    today_t = branch.get('today', 0) or 0
-    today_c = branch.get('todayClients', 0) or 0
+    today_t = branch.get('today', branch.get('turnover', 0)) or 0
+    today_c = branch.get('todayClients', branch.get('clients', 0)) or 0
     month_t = branch.get('monthTotal', 0) or 0
     month_c = branch.get('monthClients', 0) or 0
     plan = branch.get('plan', 0) or 0
 
-    lines = [f"📊 *Филиал {name}:*\n"]
-    lines.append(f"Сегодня: *{fmt_short(today_t)} | {today_c} кл.*")
-    if month_t:
+    lines = [f"📊 *Филиал {name}* за {label}:\n"]
+    lines.append(f"Оборот: *{fmt_short(today_t)} | {today_c} кл.*")
+    if month_t and period == 'day':
         lines.append(f"Месяц: {fmt_short(month_t)} | {month_c} кл.")
-    if plan:
+    if plan and period == 'day':
         pct = int(month_t / plan * 100) if plan > 0 else 0
         lines.append(f"Прогресс: *{pct}%* от плана {fmt_short(plan)}")
 
@@ -581,15 +650,18 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     Только в личном чате владельца.
     """
     chat_id = update.effective_chat.id
+    logger.info(f">>> VOICE from chat_id={chat_id}, owner={utils.owner_chat_id}")
 
     if not is_owner(chat_id):
+        logger.info(f">>> VOICE rejected: not owner")
         return
 
-    if not OPENAI_API_KEY or OPENAI_API_KEY == "YOUR_OPENAI_KEY":
+    has_groq = GROQ_API_KEY and GROQ_API_KEY != "YOUR_GROQ_KEY"
+    has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_OPENAI_KEY"
+    if not has_groq and not has_openai:
         await update.message.reply_text(
             "🎤 Голосовые сообщения пока не настроены.\n\n"
-            "Нужен OpenAI API ключ → укажи в config.py\n"
-            "Регистрация: platform.openai.com"
+            "Нужен GROQ_API_KEY или OPENAI_API_KEY в config.py"
         )
         return
 
@@ -691,6 +763,231 @@ async def handle_branch_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
             await update.message.reply_text("⚠️ Ошибка обработки. Попробуйте ещё раз.")
         except:
             pass
+
+# ════════════════════════════════════════
+# ПЛАНИРОВЩИК — голосовое управление расписанием
+# ════════════════════════════════════════
+
+# Категория дня по дню недели (0=Пн, 6=Вс)
+DAY_CATEGORIES = {0: 'kb', 1: 'my', 2: 'my', 3: 'kb', 4: 'family', 5: 'family', 6: 'plan'}
+DAY_NAMES_RU = {0: 'Пн', 1: 'Вт', 2: 'Ср', 3: 'Чт', 4: 'Пт', 5: 'Сб', 6: 'Вс'}
+DAY_EMOJI = {'kb': '💼', 'my': '🟢', 'family': '💗', 'plan': '📋'}
+
+WEEKDAY_MAP = {
+    'понедельник': 0, 'вторник': 1, 'среду': 2, 'среда': 2, 'четверг': 3,
+    'пятницу': 4, 'пятница': 4, 'субботу': 5, 'суббота': 5, 'воскресенье': 6,
+}
+
+
+def resolve_date(text: str) -> str:
+    """Конвертирует 'завтра', 'понедельник', 'послезавтра' → YYYY-MM-DD"""
+    if not text:
+        return datetime.now().strftime('%Y-%m-%d')
+
+    t = text.lower().strip()
+
+    if t == 'сегодня' or t == '':
+        return datetime.now().strftime('%Y-%m-%d')
+    if t == 'завтра':
+        return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    if t == 'послезавтра':
+        return (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d')
+
+    # День недели: ищем ближайший
+    for name, wd in WEEKDAY_MAP.items():
+        if name in t:
+            today = datetime.now()
+            today_wd = today.weekday()
+            delta = (wd - today_wd) % 7
+            if delta == 0:
+                delta = 7  # следующий такой день
+            return (today + timedelta(days=delta)).strftime('%Y-%m-%d')
+
+    # Может быть уже ISO дата
+    if re.match(r'\d{4}-\d{2}-\d{2}', t):
+        return t[:10]
+
+    return datetime.now().strftime('%Y-%m-%d')
+
+
+def calc_end_time(start: str, duration: int) -> str:
+    """'10:00' + 60min → '11:00'"""
+    if not start:
+        return ''
+    try:
+        h, m = map(int, start.split(':'))
+        total = h * 60 + m + duration
+        return f"{total // 60:02d}:{total % 60:02d}"
+    except:
+        return ''
+
+
+async def handle_planner_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE, params: dict):
+    """Добавить задачу в расписание"""
+    task = params.get('task', '').strip()
+    if not task:
+        await update.message.reply_text("Не понял задачу. Скажи: «На завтра в 10 утра встреча с юристом, час»")
+        return
+
+    date_str = resolve_date(params.get('date', 'сегодня'))
+    time_str = params.get('time', '')
+    duration = int(params.get('duration', 60))
+    end_time = calc_end_time(time_str, duration)
+
+    # Категория по дню недели
+    dt = datetime.strptime(date_str, '%Y-%m-%d')
+    category = DAY_CATEGORIES.get(dt.weekday(), 'my')
+
+    result = await add_schedule_slot(
+        date=date_str,
+        name=task,
+        start_time=time_str,
+        end_time=end_time,
+        duration=duration,
+        category=category
+    )
+
+    if result and result.get('success'):
+        day_name = DAY_NAMES_RU.get(dt.weekday(), '')
+        emoji = DAY_EMOJI.get(category, '')
+        time_info = f" в {time_str}" if time_str else ""
+        dur_info = f" ({duration} мин)" if duration != 60 else " (1 час)"
+        await update.message.reply_text(
+            f"✅ Записал в план:\n\n"
+            f"{emoji} *{day_name} {dt.strftime('%d.%m')}*{time_info}{dur_info}\n"
+            f"📌 {task}",
+            parse_mode='Markdown'
+        )
+    else:
+        error = result.get('error', 'Ошибка') if result else 'Нет ответа от таблицы'
+        await update.message.reply_text(f"❌ Не удалось записать: {error}")
+
+
+async def handle_planner_list_day(update: Update, ctx: ContextTypes.DEFAULT_TYPE, params: dict):
+    """Показать расписание на день"""
+    date_str = resolve_date(params.get('date', 'сегодня'))
+    result = await get_schedule_day(date_str)
+
+    if not result or not result.get('success'):
+        await update.message.reply_text("❌ Не удалось загрузить расписание")
+        return
+
+    slots = result.get('slots', [])
+    dt = datetime.strptime(date_str, '%Y-%m-%d')
+    day_name = DAY_NAMES_RU.get(dt.weekday(), '')
+    category = DAY_CATEGORIES.get(dt.weekday(), 'my')
+    emoji = DAY_EMOJI.get(category, '')
+
+    if not slots:
+        await update.message.reply_text(
+            f"{emoji} *{day_name} {dt.strftime('%d.%m')}* — свободный день\n\nНет запланированных задач.",
+            parse_mode='Markdown'
+        )
+        return
+
+    total_min = sum(s.get('duration', 60) for s in slots)
+    done_count = sum(1 for s in slots if s.get('done'))
+
+    lines = [f"{emoji} *{day_name} {dt.strftime('%d.%m')}* — {len(slots)} задач ({total_min // 60}ч {total_min % 60}мин)\n"]
+
+    for s in slots:
+        check = '✅' if s.get('done') else '⬜'
+        time_part = f"{s['startTime']}–{s['endTime']} " if s.get('startTime') else ''
+        dur = s.get('duration', 60)
+        lines.append(f"{check} {time_part}*{s['name']}* ({dur} мин)")
+
+    if done_count > 0:
+        lines.append(f"\n📊 Выполнено: {done_count}/{len(slots)}")
+
+    await update.message.reply_text('\n'.join(lines), parse_mode='Markdown')
+
+
+async def handle_planner_move(update: Update, ctx: ContextTypes.DEFAULT_TYPE, params: dict):
+    """Переместить задачу на другой день/время"""
+    query = params.get('task_query', '').lower()
+    if not query:
+        await update.message.reply_text("Не понял какую задачу перенести.")
+        return
+
+    # Ищем задачу в текущем расписании (сегодня + завтра)
+    found_slot = None
+    for offset in range(7):
+        check_date = (datetime.now() + timedelta(days=offset)).strftime('%Y-%m-%d')
+        result = await get_schedule_day(check_date)
+        if result and result.get('success'):
+            for slot in result.get('slots', []):
+                if query in slot.get('name', '').lower():
+                    found_slot = slot
+                    break
+        if found_slot:
+            break
+
+    if not found_slot:
+        await update.message.reply_text(f"🔍 Не нашёл задачу «{query}» в ближайшие 7 дней.")
+        return
+
+    row = found_slot['row']
+
+    # Обновляем дату если указана
+    new_date = params.get('new_date')
+    if new_date:
+        new_date_str = resolve_date(new_date)
+        await update_schedule_slot(row, 'update', 'date', new_date_str)
+
+    # Обновляем время если указано
+    new_time = params.get('new_time')
+    if new_time:
+        await update_schedule_slot(row, 'update', 'startTime', new_time)
+        duration = found_slot.get('duration', 60)
+        new_end = calc_end_time(new_time, duration)
+        if new_end:
+            await update_schedule_slot(row, 'update', 'endTime', new_end)
+
+    # Формируем ответ
+    parts = []
+    if new_date:
+        dt = datetime.strptime(resolve_date(new_date), '%Y-%m-%d')
+        parts.append(f"📅 {DAY_NAMES_RU.get(dt.weekday(), '')} {dt.strftime('%d.%m')}")
+    if new_time:
+        parts.append(f"🕐 {new_time}")
+
+    move_info = ', '.join(parts) if parts else 'обновлено'
+    await update.message.reply_text(
+        f"✅ Перенёс «{found_slot['name']}» → {move_info}",
+        parse_mode='Markdown'
+    )
+
+
+async def handle_planner_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE, params: dict):
+    """Отметить задачу как выполненную"""
+    query = params.get('task_query', '').lower()
+    if not query:
+        await update.message.reply_text("Не понял какую задачу отметить.")
+        return
+
+    # Ищем задачу сегодня и завтра
+    found_slot = None
+    for offset in range(3):
+        check_date = (datetime.now() + timedelta(days=offset)).strftime('%Y-%m-%d')
+        result = await get_schedule_day(check_date)
+        if result and result.get('success'):
+            for slot in result.get('slots', []):
+                if not slot.get('done') and query in slot.get('name', '').lower():
+                    found_slot = slot
+                    break
+        if found_slot:
+            break
+
+    if not found_slot:
+        await update.message.reply_text(f"🔍 Не нашёл незавершённую задачу «{query}» в ближайшие 3 дня.")
+        return
+
+    result = await update_schedule_slot(found_slot['row'], 'done')
+    if result and result.get('success'):
+        await update.message.reply_text(f"✅ *{found_slot['name']}* — выполнено!", parse_mode='Markdown')
+    else:
+        await update.message.reply_text("❌ Не удалось обновить задачу")
+
 
 # ════════════════════════════════════════
 # CALLBACKS

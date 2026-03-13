@@ -11,10 +11,15 @@ echo "=== ДЕПЛОЙ БОТА v9 ==="
 # 1. Создаём директорию на VPS
 ssh $VPS "mkdir -p $BOT_DIR"
 
-# 2. Копируем файлы
+# 2. Копируем все модули бота
 scp main.py $VPS:$BOT_DIR/
 scp config.py $VPS:$BOT_DIR/
+scp handlers.py $VPS:$BOT_DIR/
+scp utils.py $VPS:$BOT_DIR/
+scp sheets_api.py $VPS:$BOT_DIR/
 scp sheets_direct.py $VPS:$BOT_DIR/
+scp ai_handlers.py $VPS:$BOT_DIR/
+scp financial.py $VPS:$BOT_DIR/
 scp pdf_parser.py $VPS:$BOT_DIR/
 scp requirements.txt $VPS:$BOT_DIR/
 
