@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ЕДИНЫЙ APPS SCRIPT v1.0 — ФИНАНСОВАЯ СИСТЕМА
+// ЕДИНЫЙ APPS SCRIPT v1.1 — ФИНАНСОВАЯ СИСТЕМА (+ date/period)
 // Работает с обеими таблицами: "АТЕЛЬЕ 2026" + "Семейный бюджет"
 // Роутинг по ?action=
 // ═══════════════════════════════════════════════════════════════
@@ -300,9 +300,122 @@ function readBranchTotalsFromObsh(ss, month) {
   return results;
 }
 
+// ───────────────────────────────────────────────────────────────
+// Чтение дневных данных из листа филиала за указанные даты
+// dates = массив строк 'DD.MM' (например ['12.03', '13.03'])
+// Возвращает { atelie, himchistka, clients, total } (сумму за эти дни)
+// ───────────────────────────────────────────────────────────────
+function readBranchDailyForDates(sheet, month, dates) {
+  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  var result = { atelie: 0, himchistka: 0, clients: 0, total: 0 };
+  if (!sheet) return result;
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return result;
+
+  // Находим столбец "Дата"
+  var dateCol = -1;
+  for (var col = 0; col < data[0].length; col++) {
+    if (String(data[0][col]).trim() === 'Дата') { dateCol = col; break; }
+  }
+  if (dateCol < 0) return result;
+
+  var atCol = dateCol + 1;
+  var klCol = dateCol + 2;
+  var hcCol = dateCol + 3;
+  var inMonth = false;
+
+  // Создаём Set из дат для быстрого поиска
+  var dateSet = {};
+  for (var d = 0; d < dates.length; d++) dateSet[dates[d]] = true;
+
+  for (var r = 1; r < data.length; r++) {
+    var cell = data[r][dateCol];
+    var isDate = cell instanceof Date;
+    var cellStr = isDate ? '' : String(cell).trim();
+
+    // Заголовок месяца
+    if (!isDate && cellStr === monthNames[month]) {
+      inMonth = true;
+      continue;
+    }
+
+    if (inMonth) {
+      // Итоговая строка — стоп
+      if (!isDate && (cellStr.indexOf('>') >= 0 || cellStr === '→' || cellStr === '—>')) break;
+      // Следующий месяц — стоп
+      if (!isDate && monthNames.indexOf(cellStr) > 0) break;
+
+      // Формируем метку DD.MM
+      var dateLabel = '';
+      if (isDate) {
+        var dd = cell.getDate();
+        var mm = cell.getMonth() + 1;
+        dateLabel = (dd < 10 ? '0' : '') + dd + '.' + (mm < 10 ? '0' : '') + mm;
+      } else {
+        dateLabel = cellStr;
+      }
+
+      if (dateSet[dateLabel]) {
+        var at = parseFloat(data[r][atCol]) || 0;
+        var kl = parseInt(data[r][klCol]) || 0;
+        var hc = parseFloat(data[r][hcCol]) || 0;
+        result.atelie += at;
+        result.himchistka += hc;
+        result.clients += kl;
+        result.total += at + hc;
+      }
+    }
+  }
+  return result;
+}
+
+// ───────────────────────────────────────────────────────────────
+// Вспомогательная: генерация массива дат DD.MM для периода
+// ───────────────────────────────────────────────────────────────
+function generateDateLabels(dateStr, period) {
+  // dateStr = 'YYYY-MM-DD', period = 'day'|'week'|'month'|undefined
+  var d = new Date(dateStr + 'T12:00:00');
+  if (isNaN(d.getTime())) return { dates: [], month: new Date().getMonth() + 1, label: '' };
+
+  var dates = [];
+  var mm = d.getMonth() + 1;
+
+  if (!period || period === 'day') {
+    // Один конкретный день
+    var dd = d.getDate();
+    dates.push((dd < 10 ? '0' : '') + dd + '.' + (mm < 10 ? '0' : '') + mm);
+    return { dates: dates, month: mm, label: dateStr };
+  }
+
+  if (period === 'week') {
+    // 7 дней назад от указанной даты (включительно)
+    for (var i = 6; i >= 0; i--) {
+      var wd = new Date(d.getTime() - i * 86400000);
+      var wdd = wd.getDate();
+      var wmm = wd.getMonth() + 1;
+      dates.push((wdd < 10 ? '0' : '') + wdd + '.' + (wmm < 10 ? '0' : '') + wmm);
+    }
+    return { dates: dates, month: mm, label: 'неделя' };
+  }
+
+  if (period === 'month') {
+    // Весь месяц — возвращаем пустой dates, будем использовать месячные итоги
+    return { dates: [], month: mm, label: 'месяц', useMonthly: true };
+  }
+
+  // fallback — один день
+  var dd2 = d.getDate();
+  dates.push((dd2 < 10 ? '0' : '') + dd2 + '.' + (mm < 10 ? '0' : '') + mm);
+  return { dates: dates, month: mm, label: dateStr };
+}
+
 function handleGetBranches(e) {
   var month = parseInt((e && e.parameter && e.parameter.month) || new Date().getMonth() + 1);
   var detailBranch = (e && e.parameter && e.parameter.branch) || '';
+  var dateParam = (e && e.parameter && e.parameter.date) || '';
+  var periodParam = (e && e.parameter && e.parameter.period) || '';
   var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
   
   var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -334,30 +447,57 @@ function handleGetBranches(e) {
     12: { atelie: 2304341, himchistka: 217977 }
   };
   
-  // ──── 1. Быстрое чтение из "Общ" (1 лист вместо 9) ────
+  // ──── 1. Определяем режим: дата/период или месячный итог ────
+  var useDailyMode = false;
+  var dateInfo = null;
+  if (dateParam) {
+    dateInfo = generateDateLabels(dateParam, periodParam || 'day');
+    if (dateInfo.dates.length > 0) {
+      useDailyMode = true;
+      month = dateInfo.month;  // чтобы parseBranchSheet тоже искал в правильном месяце
+    } else if (dateInfo.useMonthly) {
+      month = dateInfo.month;  // используем месячные итоги, но за нужный месяц
+    }
+  }
+
+  // ──── 2. Чтение данных (месячных или дневных) ────
   var obshTotals = readBranchTotalsFromObsh(ss, month);
-  
-  // ──── 2. Собираем массив филиалов ────
+
+  // ──── 3. Собираем массив филиалов ────
   var filials = [];
   var totalFact = { atelie: 0, himchistka: 0, total: 0, clients: 0, profit: 0, revenue: 0 };
-  
+
   for (var i = 0; i < shortCodes.length; i++) {
     var code = shortCodes[i];
     var name = filialNames[i];
-    
-    var d = obshTotals ? (obshTotals[code] || null) : null;
-    
-    var factAtelie = d ? d.atelie : 0;
-    var factHimchistka = d ? d.himchistka : 0;
-    var factClients = d ? d.clients : 0;
-    var factTotal = d ? (d.total || (factAtelie + factHimchistka)) : 0;
-    var factProfit = d ? d.profit : 0;
+
+    var factAtelie = 0, factHimchistka = 0, factClients = 0, factTotal = 0, factProfit = 0;
+
+    if (useDailyMode) {
+      // ──── DAILY MODE: читаем конкретные дни из листа филиала ────
+      var branchSheet = ss.getSheetByName(code);
+      var dayData = readBranchDailyForDates(branchSheet, month, dateInfo.dates);
+      factAtelie = dayData.atelie;
+      factHimchistka = dayData.himchistka;
+      factClients = dayData.clients;
+      factTotal = dayData.total;
+      factProfit = 0;  // прибыль недоступна на дневном уровне
+    } else {
+      // ──── MONTHLY MODE: как раньше — из листа "Общ" ────
+      var d = obshTotals ? (obshTotals[code] || null) : null;
+      factAtelie = d ? d.atelie : 0;
+      factHimchistka = d ? d.himchistka : 0;
+      factClients = d ? d.clients : 0;
+      factTotal = d ? (d.total || (factAtelie + factHimchistka)) : 0;
+      factProfit = d ? d.profit : 0;
+    }
+
     var avgCheck = factClients > 0 ? Math.round(factAtelie / factClients) : 0;
-    
+
     var planAtelie = (monthlyPlans[month] ? monthlyPlans[month].atelie : 0) / shortCodes.length;
     var planHimchistka = (monthlyPlans[month] ? monthlyPlans[month].himchistka : 0) / shortCodes.length;
     var planTotal = planAtelie + planHimchistka;
-    
+
     var filialObj = {
       name: name,
       code: code,
@@ -381,14 +521,14 @@ function handleGetBranches(e) {
         total: planTotal > 0 ? Math.round(factTotal / planTotal * 100) : 0
       },
       forecast: calculateForecast(factTotal, planTotal, month),
-      prevYear: d ? d.prevYear : null
+      prevYear: (!useDailyMode && obshTotals && obshTotals[code]) ? obshTotals[code].prevYear : null
     };
-    
-    // ──── 3. Если запрошена детализация (?branch=М16) ────
+
+    // ──── 4. Если запрошена детализация (?branch=М16) ────
     if (detailBranch === code) {
-      var branchSheet = ss.getSheetByName(code);
-      if (branchSheet) {
-        var detail = parseBranchSheet(branchSheet, month, monthNames, shortMonths);
+      var detailSheet = ss.getSheetByName(code);
+      if (detailSheet) {
+        var detail = parseBranchSheet(detailSheet, month, monthNames, shortMonths);
         filialObj.dailyData = detail.daily;
         filialObj.fact.expenses = detail.expenses;
         filialObj.fact.salaryAT = detail.salaryAT;
@@ -398,9 +538,9 @@ function handleGetBranches(e) {
         filialObj.fact.ads = detail.ads;
       }
     }
-    
+
     filials.push(filialObj);
-    
+
     totalFact.atelie += factAtelie;
     totalFact.himchistka += factHimchistka;
     totalFact.total += factTotal;
@@ -414,7 +554,7 @@ function handleGetBranches(e) {
   
   var overallPrev = obshTotals && obshTotals['_OVERALL'] ? obshTotals['_OVERALL'].prevYear : null;
   
-  return {
+  var response = {
     success: true,
     currentMonth: month,
     monthName: monthNames[month],
@@ -430,6 +570,15 @@ function handleGetBranches(e) {
       prevYear: overallPrev
     }
   };
+
+  // Добавляем инфо о запрошенном периоде
+  if (dateParam) {
+    response.requestedDate = dateParam;
+    response.requestedPeriod = periodParam || 'day';
+    response.dataMode = useDailyMode ? 'daily' : 'monthly';
+  }
+
+  return response;
 }
 
 // ───────────────────────────────────────────────────────────────

@@ -196,7 +196,7 @@ async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_
         )
         return
 
-    branches = data.get('branches', data.get('data', []))
+    branches = data.get('filials', data.get('branches', data.get('data', [])))
 
     if not branches:
         await msg.edit_text(f"📊 Данных за {label} ещё нет.")
@@ -204,14 +204,14 @@ async def handle_query_business_today(update: Update, ctx: ContextTypes.DEFAULT_
 
     # Формируем сводку
     # Поддерживаем как 'today' (для совместимости) так и 'turnover'
-    total_turnover = sum(b.get('today', b.get('turnover', 0)) or 0 for b in branches)
-    total_clients = sum(b.get('todayClients', b.get('clients', 0)) or 0 for b in branches)
+    total_turnover = sum((b.get('fact', {}).get('total', 0) or b.get('today', b.get('turnover', 0))) or 0 for b in branches)
+    total_clients = sum((b.get('fact', {}).get('clients', 0) or b.get('todayClients', b.get('clients', 0))) or 0 for b in branches)
 
     lines = [f"📊 *Сводка за {label}:*\n"]
     for b in branches:
         name = b.get('name', b.get('branch', '—'))
-        t = b.get('today', b.get('turnover', 0)) or 0
-        c = b.get('todayClients', b.get('clients', 0)) or 0
+        t = (b.get('fact', {}).get('total', 0) or b.get('today', b.get('turnover', 0))) or 0
+        c = (b.get('fact', {}).get('clients', 0) or b.get('todayClients', b.get('clients', 0))) or 0
         if t > 0:
             lines.append(f"• *{name}:* {fmt_short(t)} | {c} кл.")
         else:
@@ -235,7 +235,7 @@ async def handle_query_branch(update: Update, ctx: ContextTypes.DEFAULT_TYPE, br
         await msg.edit_text("⚠️ Не удалось получить данные.")
         return
 
-    branches = data.get('branches', data.get('data', []))
+    branches = data.get('filials', data.get('branches', data.get('data', [])))
     branch = next((b for b in branches if branch_name.upper() in str(b.get('name', b.get('branch', ''))).upper()), None)
 
     if not branch:
