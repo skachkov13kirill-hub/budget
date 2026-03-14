@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DressCode Отчёт</title>
+<link rel="manifest" href="report-manifest.json">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f3f0ff;
+  min-height: 100vh;
+  padding: 16px;
+  color: #1e1b4b;
+}
+.container {
+  max-width: 420px;
+  margin: 0 auto;
+}
+.header {
+  text-align: center;
+  padding: 20px 0 24px;
+}
+.logo {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b5cf6;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.branch-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+.date-display {
+  font-size: 15px;
+  color: #6b7280;
+  margin-top: 6px;
+}
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.field-input {
+  width: 100%;
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e1b4b;
+  border: none;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 8px 0;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+.field-input:focus {
+  border-color: #8b5cf6;
+}
+.field-input::placeholder {
+  color: #d1d5db;
+  font-weight: 400;
+}
+.field-suffix {
+  font-size: 14px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+/* Photo upload */
+.photo-area {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.photo-area.has-photo {
+  border-color: #8b5cf6;
+  padding: 0;
+}
+.photo-area:active {
+  background: #f9fafb;
+}
+.photo-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+.photo-text {
+  font-size: 15px;
+  color: #6b7280;
+}
+.photo-preview {
+  width: 100%;
+  border-radius: 10px;
+  display: none;
+}
+.photo-area.has-photo .photo-preview {
+  display: block;
+}
+.photo-area.has-photo .photo-placeholder {
+  display: none;
+}
+.photo-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: none;
+}
+.photo-area.has-photo .photo-remove {
+  display: block;
+}
+
+/* Date picker */
+.date-input {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e1b4b;
+  border: none;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 8px 0;
+  background: transparent;
+  outline: none;
+  -webkit-appearance: none;
+}
+.date-input:focus {
+  border-color: #8b5cf6;
+}
+
+/* Submit */
+.submit-btn {
+  width: 100%;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #8b5cf6;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.submit-btn:active {
+  background: #7c3aed;
+  transform: scale(0.98);
+}
+.submit-btn:disabled {
+  background: #c4b5fd;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Status */
+.status {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 15px;
+  min-height: 24px;
+}
+.status.success {
+  color: #059669;
+  font-weight: 600;
+}
+.status.error {
+  color: #dc2626;
+}
+.status.loading {
+  color: #8b5cf6;
+}
+
+/* Error screen */
+.error-screen {
+  text-align: center;
+  padding: 60px 20px;
+}
+.error-screen h2 {
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+.error-screen p {
+  color: #6b7280;
+  font-size: 15px;
+}
+
+/* History */
+.history {
+  margin-top: 24px;
+  padding-bottom: 40px;
+}
+.history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.history-date { color: #6b7280; }
+.history-values { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container" id="app"></div>
+
+<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwYYk5LU9uTxaPhJkt8X89mXpTlfZaR8dSQcw3SNZtIws1nYRlxy_MAGErMPmO4dY_b1g/exec';
+
+const BRANCHES = {
+  'М16':  { name: 'Менделеева 16',       sheet: 'М16' },
+  'В8':   { name: 'Воронцовский 8',      sheet: 'В8' },
+  'П14':  { name: 'Петровский 14',       sheet: 'П14' },
+  'А6':   { name: 'Арсенальная 6',       sheet: 'А6' },
+  'Г4':   { name: 'Графская 4',          sheet: 'Г4' },
+  'В22':  { name: 'Воронцовский 22',     sheet: 'В22' },
+  'Ек8':  { name: 'Екатерининский 8',    sheet: 'Е8' },
+  'В20':  { name: 'Воронцовский 20',     sheet: 'В20' },
+  'Ек17': { name: 'Екатерининская 17',   sheet: 'Е17' },
+  'Г11':  { name: 'Графская 11',         sheet: 'Г11' }
+};
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+const params = new URLSearchParams(window.location.search);
+const branchCode = params.get('b');
+const branch = branchCode ? BRANCHES[branchCode] : null;
+const app = document.getElementById('app');
+
+let photoBase64 = null;
+
+if (!branch) {
+  showBranchList();
+} else {
+  showForm();
+}
+
+// ═══════════════════════════════════════════════════════════
+// BRANCH LIST (if no ?b= param)
+// ═══════════════════════════════════════════════════════════
+function showBranchList() {
+  const items = Object.entries(BRANCHES).map(([code, b]) =>
+    `<a href="?b=${encodeURIComponent(code)}" style="display:block;padding:16px;background:#fff;border-radius:12px;margin-bottom:8px;text-decoration:none;color:#1e1b4b;font-weight:600;font-size:17px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <span style="color:#8b5cf6;font-size:13px;font-weight:700;">${code}</span>&nbsp;&nbsp;${b.name}
+    </a>`
+  ).join('');
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="logo">DressCode</div>
+      <div class="branch-name">Выберите филиал</div>
+    </div>
+    ${items}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FORM
+// ═══════════════════════════════════════════════════════════
+function showForm() {
+  const today = new Date();
+  const dateStr = today.toISOString().split('T')[0];
+  const displayDate = today.toLocaleDateString('ru-RU', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  });
+
+  document.title = `${branchCode} — Отчёт`;
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="logo">DressCode</div>
+      <div class="branch-name">${branch.name}</div>
+      <div class="date-display">${displayDate}</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Дата отчёта</div>
+      <input type="date" id="reportDate" class="date-input" value="${dateStr}">
+    </div>
+
+    <div class="card">
+      <div class="field-label">Принято заказов на сумму</div>
+      <input type="number" id="atelie" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Количество новых клиентов</div>
+      <input type="number" id="clients" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">человек</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Наличные</div>
+      <input type="number" id="cash" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Безналичные</div>
+      <input type="number" id="card" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Фото отчёта</div>
+      <div class="photo-area" id="photoArea" onclick="document.getElementById('photoInput').click()">
+        <div class="photo-placeholder">
+          <div class="photo-icon">📷</div>
+          <div class="photo-text">Сфотографировать тетрадку</div>
+        </div>
+        <img class="photo-preview" id="photoPreview">
+        <button class="photo-remove" id="photoRemove" onclick="event.stopPropagation(); removePhoto();">✕</button>
+      </div>
+    </div>
+
+    <button class="submit-btn" id="submitBtn" onclick="submitReport()">Отправить отчёт</button>
+    <div class="status" id="status"></div>
+
+    <div class="history" id="history"></div>
+  `;
+
+  // Load sent history from localStorage
+  loadHistory();
+}
+
+// ═══════════════════════════════════════════════════════════
+// PHOTO
+// ═══════════════════════════════════════════════════════════
+document.getElementById('photoInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // Resize to max 1200px to reduce upload size
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const img = new Image();
+    img.onload = function() {
+      const maxSize = 1200;
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = h * maxSize / w; w = maxSize; }
+        else { w = w * maxSize / h; h = maxSize; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+      const preview = document.getElementById('photoPreview');
+      const area = document.getElementById('photoArea');
+      preview.src = photoBase64;
+      area.classList.add('has-photo');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+function removePhoto() {
+  photoBase64 = null;
+  document.getElementById('photoPreview').src = '';
+  document.getElementById('photoArea').classList.remove('has-photo');
+  document.getElementById('photoInput').value = '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT
+// ═══════════════════════════════════════════════════════════
+async function submitReport() {
+  const btn = document.getElementById('submitBtn');
+  const status = document.getElementById('status');
+  const dateVal = document.getElementById('reportDate').value;
+  const atelie = parseInt(document.getElementById('atelie').value);
+  const clients = parseInt(document.getElementById('clients').value);
+  const cash = parseInt(document.getElementById('cash').value) || 0;
+  const card = parseInt(document.getElementById('card').value) || 0;
+
+  // Validate
+  if (!dateVal) { showStatus('Укажите дату', 'error'); return; }
+  if (isNaN(atelie) || atelie <= 0) { showStatus('Введите сумму заказов', 'error'); return; }
+  if (isNaN(clients) || clients < 0) { showStatus('Введите количество клиентов', 'error'); return; }
+
+  btn.disabled = true;
+  showStatus('Отправляю...', 'loading');
+
+  try {
+    // 1. Send numbers to Google Sheets
+    const resp = await fetch(APPS_SCRIPT_URL + '?action=writeBranchDaily', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        branch: branch.sheet,
+        date: dateVal,
+        atelie: atelie,
+        clients: clients
+      })
+    });
+    const result = await resp.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Ошибка записи');
+    }
+
+    // 2. Upload photo if present
+    if (photoBase64) {
+      showStatus('Загружаю фото...', 'loading');
+      try {
+        const photoResp = await fetch(APPS_SCRIPT_URL + '?action=uploadReportPhoto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            branch: branch.sheet,
+            date: dateVal,
+            photo: photoBase64
+          })
+        });
+        const photoResult = await photoResp.json();
+        if (!photoResult.success) {
+          console.warn('Photo upload failed:', photoResult.error);
+        }
+      } catch (photoErr) {
+        console.warn('Photo upload error:', photoErr);
+        // Don't fail the whole report if photo fails
+      }
+    }
+
+    // 3. Save to local history
+    saveToHistory(dateVal, atelie, clients);
+
+    // 4. Success
+    showStatus(`Записано: ${atelie.toLocaleString('ru-RU')}₽, ${clients} кл.`, 'success');
+
+    // Clear form
+    document.getElementById('atelie').value = '';
+    document.getElementById('clients').value = '';
+    document.getElementById('cash').value = '';
+    document.getElementById('card').value = '';
+    removePhoto();
+
+  } catch (err) {
+    showStatus('Ошибка: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showStatus(text, type) {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = 'status ' + (type || '');
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOCAL HISTORY
+// ═══════════════════════════════════════════════════════════
+function getHistoryKey() {
+  return 'dc_report_' + branchCode;
+}
+
+function saveToHistory(date, atelie, clients) {
+  const key = getHistoryKey();
+  let history = JSON.parse(localStorage.getItem(key) || '[]');
+  // Remove duplicate date
+  history = history.filter(h => h.date !== date);
+  history.unshift({ date, atelie, clients, ts: Date.now() });
+  // Keep last 14
+  history = history.slice(0, 14);
+  localStorage.setItem(key, JSON.stringify(history));
+  loadHistory();
+}
+
+function loadHistory() {
+  if (!branchCode) return;
+  const key = getHistoryKey();
+  const history = JSON.parse(localStorage.getItem(key) || '[]');
+  const el = document.getElementById('history');
+  if (!el || history.length === 0) return;
+
+  const items = history.map(h => {
+    const d = new Date(h.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    return `<div class="history-item">
+      <span class="history-date">${dateStr}</span>
+      <span class="history-values">${Number(h.atelie).toLocaleString('ru-RU')}₽ · ${h.clients} кл.</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="history-title">Отправленные отчёты</div>
+    ${items}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+// PWA: Register service worker
+// ═══════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('report-sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
