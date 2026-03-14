@@ -1,16 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
-// APP.JS — Ядро DressCode Финансы v4.0
-// State, API, Cache, Cloud Sync, Navigation, Utilities
+// APP.JS — Ядро DressCode Дашборд v5.0
+// State, API, Cache, Navigation, Utilities
 // ═══════════════════════════════════════════════════════════════
 
 // ── CONSTANTS ──
 var API_ATELIE = 'https://script.google.com/macros/s/AKfycbwYYk5LU9uTxaPhJkt8X89mXpTlfZaR8dSQcw3SNZtIws1nYRlxy_MAGErMPmO4dY_b1g/exec';
-var API_FAMILY = 'https://script.google.com/macros/s/AKfycbzg1ELGJnnS7rKKFchd5y5CieOOPFZ0-KsUtCN5FcRiu_gZUoZSI6k2-kBt2Ur7d6UR/exec';
-var CACHE_KEY = 'dresscode_v4_state';
+var CACHE_KEY = 'dresscode_v5_state';
 var CACHE_TTL = 5 * 60 * 1000;       // 5 мин для текущего месяца
 var CACHE_TTL_OLD = 60 * 60 * 1000;  // 1 час для прошлых месяцев
-var FAM_STORAGE_KEY = 'dresscode_family_v4';
-var FAM_RULES_KEY = 'dresscode_rules_v4';
 var MONTH_NAMES = ['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 var MONTH_NAMES_CAP = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 var MONTH_NAMES_SHORT = ['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -25,18 +22,11 @@ var state = {
   updatedAt: 0
 };
 
-// Family data — хранится отдельно
+// Family data stub (business.js references familyData.excludedTransactions for RSC analysis)
 var familyData = {
   transactions: [],
-  excludedTransactions: [],
-  norms: {},
-  lastUpdate: null
+  excludedTransactions: []
 };
-
-// Rules — три уровня правил
-var userCategoryRules = {};
-var businessRules = {};
-var bucketRules = {};
 
 // ═══════════════════════════════════════════════════════════════
 // CACHE — localStorage с TTL
@@ -55,39 +45,6 @@ function saveCache(s) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(s)); } catch(e) {}
 }
 
-function loadFamilyLocal() {
-  try {
-    var raw = localStorage.getItem(FAM_STORAGE_KEY);
-    if (raw) {
-      var d = JSON.parse(raw);
-      if (d.transactions) familyData.transactions = d.transactions;
-      if (d.excludedTransactions) familyData.excludedTransactions = d.excludedTransactions;
-      if (d.norms) familyData.norms = d.norms;
-      if (d.lastUpdate) familyData.lastUpdate = d.lastUpdate;
-    }
-  } catch(e) {}
-  try {
-    var rules = localStorage.getItem(FAM_RULES_KEY);
-    if (rules) {
-      var r = JSON.parse(rules);
-      if (r.userCategoryRules) userCategoryRules = r.userCategoryRules;
-      if (r.businessRules) businessRules = r.businessRules;
-      if (r.bucketRules) bucketRules = r.bucketRules;
-    }
-  } catch(e) {}
-}
-
-function saveFamilyLocal() {
-  try {
-    localStorage.setItem(FAM_STORAGE_KEY, JSON.stringify(familyData));
-    localStorage.setItem(FAM_RULES_KEY, JSON.stringify({
-      userCategoryRules: userCategoryRules,
-      businessRules: businessRules,
-      bucketRules: bucketRules
-    }));
-  } catch(e) {}
-}
-
 // ═══════════════════════════════════════════════════════════════
 // FETCH HELPERS
 // ═══════════════════════════════════════════════════════════════
@@ -97,124 +54,6 @@ function fetchWithTimeout(url, timeout) {
   var id = setTimeout(function() { controller.abort(); }, timeout);
   return fetch(url, { signal: controller.signal }).then(function(r) {
     clearTimeout(id); return r;
-  });
-}
-
-function fetchJSONP(url, timeout) {
-  timeout = timeout || 20000;
-  return new Promise(function(resolve, reject) {
-    var cbName = 'cb_' + Math.random().toString(36).substr(2, 8) + '_' + Date.now();
-    var timer = setTimeout(function() { delete window[cbName]; reject(new Error('JSONP timeout')); }, timeout);
-    window[cbName] = function(response) {
-      clearTimeout(timer); delete window[cbName];
-      resolve(response);
-    };
-    var script = document.createElement('script');
-    script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + cbName;
-    script.onerror = function() { clearTimeout(timer); delete window[cbName]; reject(new Error('JSONP error')); };
-    document.head.appendChild(script);
-    script.onload = function() { script.remove(); };
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CLOUD SYNC — загрузка из Sheets + выгрузка в Sheets
-// ═══════════════════════════════════════════════════════════════
-function uploadToSheets(type, data) {
-  return fetch(API_FAMILY + '?type=' + type, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(data)
-  }).then(function(r) { return r.json(); })
-    .catch(function(e) { console.log('Upload ' + type + ' error:', e); return null; });
-}
-
-var _uploadTimer = null;
-function uploadAllDataDebounced() {
-  if (_uploadTimer) clearTimeout(_uploadTimer);
-  _uploadTimer = setTimeout(function() {
-    _uploadTimer = null;
-    Promise.all([
-      uploadToSheets('transactions', familyData.transactions),
-      uploadToSheets('excluded', familyData.excludedTransactions),
-      uploadToSheets('rules', userCategoryRules),
-      uploadToSheets('bizrules', businessRules),
-      uploadToSheets('bucketrules', bucketRules)
-    ]).then(function() {
-      console.log('Cloud sync done');
-    });
-  }, 2000);
-}
-
-function syncFamily() {
-  showToast('Синхронизация...');
-  Promise.all([
-    fetchJSONP(API_FAMILY + '?type=transactions').catch(function() { return { success: false }; }),
-    fetchJSONP(API_FAMILY + '?type=excluded').catch(function() { return { success: false }; }),
-    fetchJSONP(API_FAMILY + '?type=rules').catch(function() { return { success: false }; }),
-    fetchJSONP(API_FAMILY + '?type=bizrules').catch(function() { return { success: false }; }),
-    fetchJSONP(API_FAMILY + '?type=bucketrules').catch(function() { return { success: false }; })
-  ]).then(function(results) {
-    var txResp = results[0];
-    var exResp = results[1];
-    var rulesResp = results[2];
-    var bizResp = results[3];
-    var bucketResp = results[4];
-
-    if (txResp && txResp.success && txResp.data) {
-      familyData.transactions = mergeTransactions(familyData.transactions, txResp.data);
-    }
-    if (exResp && exResp.success && exResp.data) {
-      familyData.excludedTransactions = mergeTransactions(familyData.excludedTransactions, exResp.data);
-    }
-    if (rulesResp && rulesResp.success && rulesResp.data) {
-      Object.assign(userCategoryRules, rulesResp.data);
-    }
-    if (bizResp && bizResp.success && bizResp.data) {
-      Object.assign(businessRules, bizResp.data);
-    }
-    if (bucketResp && bucketResp.success && bucketResp.data) {
-      Object.assign(bucketRules, bucketResp.data);
-    }
-
-    familyData.lastUpdate = new Date().toISOString();
-    saveFamilyLocal();
-    if (typeof renderFamilyTab === 'function') renderFamilyTab();
-    showToast('Синхронизировано');
-    uploadAllDataDebounced();
-  }).catch(function(err) {
-    showToast('Ошибка синхронизации');
-    console.error('Sync error:', err);
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MERGE — облако + локальные данные (облако = приоритет)
-// ═══════════════════════════════════════════════════════════════
-function getTxKey(tx) {
-  var d = String(tx.date || '').substring(0, 10);
-  var a = String(tx.amount || 0);
-  var desc = String(tx.description || tx.merchant || '').substring(0, 25).toUpperCase();
-  return d + '|' + a + '|' + desc;
-}
-
-function mergeTransactions(localArr, cloudArr) {
-  var map = {};
-  (cloudArr || []).forEach(function(tx) { map[getTxKey(tx)] = tx; });
-  (localArr || []).forEach(function(tx) {
-    var key = getTxKey(tx);
-    if (!map[key]) map[key] = tx;
-  });
-  return Object.values(map);
-}
-
-function deduplicateTransactions(arr) {
-  var seen = {};
-  return (arr || []).filter(function(tx) {
-    var key = getTxKey(tx);
-    if (seen[key]) return false;
-    seen[key] = true;
-    return true;
   });
 }
 
@@ -229,14 +68,10 @@ function refreshAll() {
   var month = new Date().getMonth() + 1;
   Promise.all([
     fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetchWithTimeout(API_ATELIE + '?action=getAll', 15000).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetchJSONP(API_FAMILY + '?type=transactions').catch(function() { return { success: false }; }),
-    fetchJSONP(API_FAMILY + '?type=excluded').catch(function() { return { success: false }; })
+    fetchWithTimeout(API_ATELIE + '?action=getAll', 15000).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var branchResp = results[0];
     var allResp = results[1];
-    var txResp = results[2];
-    var exResp = results[3];
 
     if (branchResp && branchResp.success !== false) state.branches = branchResp;
     if (allResp && allResp.success) {
@@ -245,16 +80,9 @@ function refreshAll() {
       if (allResp.settings) state.settings = allResp.settings;
       if (allResp.forecast) state.forecast = allResp.forecast;
     }
-    if (txResp && txResp.success && txResp.data) {
-      familyData.transactions = mergeTransactions(familyData.transactions, txResp.data);
-    }
-    if (exResp && exResp.success && exResp.data) {
-      familyData.excludedTransactions = mergeTransactions(familyData.excludedTransactions, exResp.data);
-    }
 
     state.updatedAt = Date.now();
     saveCache(state);
-    saveFamilyLocal();
     renderAll();
     showLastUpdate();
     btn.classList.remove('spinning');
@@ -266,20 +94,14 @@ function refreshAll() {
 }
 
 function renderAll() {
-  if (typeof renderOverview === 'function') renderOverview();
   if (state.branches) {
     if (typeof renderBizOverview === 'function') renderBizOverview(state.branches);
     if (typeof renderFilials === 'function') renderFilials(state.branches);
   }
-  if (typeof renderFamilyTab === 'function') renderFamilyTab();
+  if (typeof renderPaymentsTab === 'function') renderPaymentsTab();
+
   // Disable future months in biz selector
-  var bizSel = document.getElementById('bizMonthSelect');
-  if (bizSel) {
-    var cm = new Date().getMonth() + 1;
-    bizSel.querySelectorAll('option').forEach(function(o) {
-      o.disabled = parseInt(o.value) > cm;
-    });
-  }
+  if (typeof bizEnforceDateLimits === 'function') bizEnforceDateLimits();
 }
 
 function showLastUpdate() {
@@ -291,27 +113,28 @@ function showLastUpdate() {
   document.getElementById('headerSubtitle').textContent = 'Обновлено ' + hh + ':' + mm;
 }
 
-// Branch loading for specific month
+// Branch loading for specific month + year
 function loadBranches(forceRefresh) {
   var sel = document.getElementById('bizMonthSelect');
+  var ySel = document.getElementById('bizYearSelect');
   var month = parseInt(sel.value);
+  var year = ySel ? parseInt(ySel.value) : new Date().getFullYear();
   var now = new Date();
   var cm = now.getMonth() + 1;
+  var cy = now.getFullYear();
 
-  // Disable future months
-  var opts = sel.querySelectorAll('option');
-  opts.forEach(function(o) {
-    o.disabled = parseInt(o.value) > cm;
-  });
+  // Disable future months for current year
+  if (typeof bizEnforceDateLimits === 'function') bizEnforceDateLimits();
 
   // Check cache
-  var cacheKey = 'branches_month_' + month;
+  var cacheKey = 'branches_' + year + '_' + month;
+  var isCurrentMonth = (year === cy && month === cm);
   if (!forceRefresh) {
     try {
       var raw = localStorage.getItem(cacheKey);
       if (raw) {
         var c = JSON.parse(raw);
-        var ttl = month === cm ? CACHE_TTL : CACHE_TTL_OLD;
+        var ttl = isCurrentMonth ? CACHE_TTL : CACHE_TTL_OLD;
         if (Date.now() - c.ts < ttl) {
           applyBranchData(c.data, month);
           return;
@@ -325,7 +148,7 @@ function loadBranches(forceRefresh) {
   document.getElementById('bizError').style.display = 'none';
   document.getElementById('filialsGrid').innerHTML = '';
 
-  fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month, 20000)
+  fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year, 20000)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
@@ -445,11 +268,10 @@ window.onload = function() {
   var now = new Date();
   var sel = document.getElementById('bizMonthSelect');
   if (sel) sel.value = now.getMonth() + 1;
+  var ySel = document.getElementById('bizYearSelect');
+  if (ySel) ySel.value = now.getFullYear();
 
-  // 1. Load family local data
-  loadFamilyLocal();
-
-  // 2. Show cached state if fresh
+  // Show cached state if fresh
   var cached = loadCache();
   if (cached) {
     state = cached;
@@ -458,10 +280,10 @@ window.onload = function() {
     document.getElementById('headerSubtitle').textContent = 'Из кеша \u00b7 обновление...';
   }
 
-  // 3. Load fresh data from APIs
+  // Load fresh data from APIs
   refreshAll();
 
-  // 4. Auto-refresh every 5 minutes
+  // Auto-refresh every 5 minutes
   setInterval(function() {
     var cm = new Date().getMonth() + 1;
     var sel = document.getElementById('bizMonthSelect');
@@ -470,11 +292,8 @@ window.onload = function() {
     }
   }, CACHE_TTL);
 
-  // 5. Service Worker
+  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(e) { console.log('SW:', e); });
   }
-
-  // 6. Family month filter
-  if (typeof initFamilyFilters === 'function') initFamilyFilters();
 };

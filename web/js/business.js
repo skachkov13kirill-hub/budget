@@ -9,16 +9,29 @@ function renderBizOverview(data) {
   var t = data.totals;
   document.getElementById('ov-atelie').textContent = fmt(t.fact.atelie);
   document.getElementById('ov-himch').textContent = fmt(t.fact.avgCheck || 0);
-  document.getElementById('ov-total').textContent = fmt(t.fact.total);
   document.getElementById('ov-clients').textContent = t.fact.clients.toLocaleString('ru-RU');
   document.getElementById('ov-profit').textContent = fmt(t.fact.profit);
 
+  // Всего = ателье + химчистка (из данных)
+  var totalWithHimch = (t.fact.atelie || 0) + (t.fact.himchistka || 0);
+  document.getElementById('ov-total').textContent = fmt(t.fact.total || totalWithHimch);
+
   if (t.plan.total > 0) {
-    document.getElementById('ov-atelie-plan').textContent = 'План: ' + fmt(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
-    document.getElementById('ov-himch-plan').textContent = t.fact.clients + ' кл · план ' + fmtShort(t.plan.atelie);
-    document.getElementById('ov-total-plan').textContent = 'План: ' + fmt(t.plan.total) + ' (' + t.performance.total + '%)';
+    document.getElementById('ov-atelie-plan').textContent = 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
+    // Средний чек: план = план ателье / план клиентов
+    var avgCheckPlan = (t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
+    document.getElementById('ov-himch-plan').textContent = avgCheckPlan > 0 ? 'план ' + fmt(avgCheckPlan) : t.fact.clients + ' кл';
+    // Всего: показываем план + химч
+    var planHimch = t.plan.himchistka || 0;
+    var totalPlanFull = t.plan.total + (planHimch > 0 ? 0 : 0); // total уже включает химч
+    document.getElementById('ov-total-plan').textContent = 'План: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)';
   }
-  if (t.fact.avgCheck) document.getElementById('ov-avg-check').textContent = 'Ср.чек: ' + fmt(t.fact.avgCheck);
+  // Клиенты: план + факт
+  if (t.plan && t.plan.clients > 0) {
+    document.getElementById('ov-avg-check').textContent = 'план ' + t.plan.clients + ' \u00b7 ' + t.performance.total + '%';
+  } else if (t.fact.avgCheck) {
+    document.getElementById('ov-avg-check').textContent = 'Ср.чек: ' + fmt(t.fact.avgCheck);
+  }
 
   var pct = t.performance ? Math.min(t.performance.total, 100) : 0;
   document.getElementById('ov-progress').style.width = pct + '%';
@@ -223,20 +236,8 @@ function getDaysInMonth(m, y) {
   return MONTH_DAYS[m];
 }
 
-// ═══ Получить состояние доп. дохода (100К) ═══
-function getExtraIncomeKey() {
-  var now = new Date();
-  return 'dresscode_extra_income_' + now.getFullYear() + '-' + (now.getMonth() + 1);
-}
-function isExtraIncomeReceived() {
-  return localStorage.getItem(getExtraIncomeKey()) === '1';
-}
-function toggleExtraIncome() {
-  var key = getExtraIncomeKey();
-  localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1');
-  renderCreditsChecklist();
-  if (typeof renderPlanner === 'function' && state.branches) renderPlanner(state.branches);
-}
+// ═══ Доп. доход (100К) — функции в payments.js ═══
+// isExtraIncomeReceived(), toggleExtraIncome(), EXTRA_INCOME — определены в payments.js
 
 function renderPlanner(data) {
   var el = document.getElementById('plannerCard');
@@ -691,42 +692,10 @@ function renderFilials(data) {
   });
 }
 
-// ── FILIAL DETAIL OVERLAY ──
-function openFilialDetail(f, month) {
-  var overlay = getOverlay('filialOverlay');
-  var perf = f.performance.total;
-  var zone = perf >= 95 ? 'green' : perf >= 85 ? 'yellow' : 'red';
-  var zoneColor = zone === 'green' ? '#22C55E' : zone === 'yellow' ? '#FFAA00' : '#FF4D4D';
-  var nowMonth = new Date().getMonth() + 1;
-  var isPast = month < nowMonth;
-  var fc3 = !isPast ? calcForecast3Weeks(f.fact.total, month) : null;
-  var fcTotal = fc3 ? fc3.total : f.fact.total;
-  var fcPct = f.plan.total > 0 ? Math.round(fcTotal / f.plan.total * 100) : 0;
-
-  overlay.querySelector('.overlay-panel').innerHTML =
-    '<div class="overlay-handle"></div>' +
-    '<div style="background:linear-gradient(135deg,#6C5CE7,#A29BFE);color:white;padding:16px 18px 18px;margin-top:8px;">' +
-      '<div style="font-size:18px;font-weight:800;">' + f.name + '</div>' +
-      '<div style="font-size:13px;opacity:0.85;margin-top:3px;">' + MONTH_NAMES_CAP[month] + ' 2026 \u00b7 ' + perf + '% плана' + (isPast ? ' \u00b7 закрыт' : ' \u00b7 прогноз ' + fcPct + '%') + '</div>' +
-    '</div>' +
-    '<div style="padding:14px;">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
-        '<div style="background:white;border-radius:12px;padding:12px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">Средний чек</div><div style="font-size:20px;font-weight:800;">' + fmt(f.fact.avgCheck) + '</div></div>' +
-        '<div style="background:white;border-radius:12px;padding:12px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">' + (isPast ? 'Итог' : 'Прогноз') + '</div><div style="font-size:20px;font-weight:800;">' + fmtShort(fcTotal) + '</div><div style="font-size:11px;color:' + zoneColor + ';margin-top:2px;">' + fcPct + '% плана</div></div>' +
-      '</div>' +
-      '<div style="background:white;border-radius:14px;padding:14px;margin-bottom:12px;">' +
-        '<div style="font-size:13px;font-weight:700;margin-bottom:4px;">Выручка по неделям</div>' +
-        '<div id="weekRevChart"><div class="loading-box" style="padding:20px;"><div class="spinner"></div></div></div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="overlay-close" onclick="closeOverlay(\'filialOverlay\')">Закрыть</div>';
-
-  showOverlay('filialOverlay');
-  loadBranchDailyData(f, month, zoneColor);
-}
+// ── FILIAL DETAIL OVERLAY ── (moved to bottom of file, enhanced version)
 
 function loadBranchDailyData(f, month, zoneColor) {
-  fetchWithTimeout(API_ATELIE + '?action=getBranchDaily&code=' + f.code + '&month=' + month + '&year=2026', 10000)
+  fetchWithTimeout(API_ATELIE + '?action=getBranchDaily&code=' + f.code + '&month=' + month + '&year=' + (document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear()), 10000)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data && data.success && data.days && data.days.length >= 3) {
@@ -785,80 +754,276 @@ function renderWeekBars(weeks, color) {
     }).join('') + '</div>';
 }
 
-// ── NETWORK DETAIL OVERLAY ──
+// ── NETWORK DETAIL OVERLAY (Enhanced) ──
 function openNetworkDetail(metricKey) {
   if (!state.branches || !state.branches.filials) return;
   var data = state.branches;
+  var month = data.currentMonth || (new Date().getMonth() + 1);
+  var now = new Date();
+  var yearSel = document.getElementById('bizYearSelect');
+  var selYear = yearSel ? parseInt(yearSel.value) : now.getFullYear();
+  var isCurrentMonth = (now.getMonth() + 1) === month && now.getFullYear() === selYear;
+  var dayOfMonth = isCurrentMonth ? now.getDate() : new Date(selYear, month, 0).getDate();
+  var daysInMonth = new Date(selYear, month, 0).getDate();
+  var daysLeft = isCurrentMonth ? daysInMonth - dayOfMonth : 0;
+
   var METRIC = {
-    atelie:   { title: 'Ателье \u2014 сеть', field: 'atelie', planField: 'atelie', fmt: 'money', color: '#6C5CE7' },
-    himch:    { title: 'Химчистка \u2014 сеть', field: 'himchistka', planField: 'himchistka', fmt: 'money', color: '#0984E3' },
-    avgcheck: { title: 'Средний чек \u2014 сеть', field: 'avgCheck', planField: null, fmt: 'money', color: '#0984E3' },
-    total:    { title: 'Выручка итого', field: 'total', planField: 'total', fmt: 'money', color: '#00B894' },
-    clients:  { title: 'Клиенты \u2014 сеть', field: 'clients', planField: 'clients', fmt: 'count', color: '#E17055' },
-    profit:   { title: 'Прибыль \u2014 сеть', field: 'profit', planField: 'total', fmt: 'money', color: '#FDCB6E' },
-    forecast: { title: 'Прогноз', field: null, planField: 'total', fmt: 'money', color: '#A29BFE' }
+    atelie:   { title: '\u2702\uFE0F Ателье \u2014 сеть', color: '#6C5CE7' },
+    avgcheck: { title: '\uD83D\uDCB0 Средний чек \u2014 сеть', color: '#0984E3' },
+    total:    { title: '\uD83D\uDCCA Выручка итого', color: '#00B894' },
+    clients:  { title: '\uD83D\uDC65 Клиенты \u2014 сеть', color: '#E17055' },
+    profit:   { title: '\uD83D\uDCC8 Эффективность \u2014 сеть', color: '#FDCB6E' },
+    forecast: { title: '\uD83D\uDD2E Прогноз \u2014 сеть', color: '#A29BFE' }
   };
   var cfg = METRIC[metricKey]; if (!cfg) return;
-  var month = data.currentMonth || (new Date().getMonth() + 1);
 
+  // ── Build per-filial rows ──
   var rows = data.filials.map(function(f) {
-    var fact = 0, plan = 0;
-    if (metricKey === 'forecast') {
-      var fc3 = calcForecast3Weeks(f.fact.total, month);
-      fact = fc3 ? fc3.total : f.fact.total;
-      plan = f.plan.total || 0;
-    } else if (metricKey === 'profit') {
-      fact = f.fact.profit || 0;
-      plan = Math.round((f.plan.atelie || 0) * 0.5 + (f.plan.himchistka || 0) * 0.4);
-    } else if (metricKey === 'avgcheck') {
-      fact = f.fact.avgCheck || 0;
-      plan = 0; // нет плана по среднему чеку
-    } else {
-      fact = f.fact[cfg.field] || 0;
-      plan = cfg.planField ? (f.plan[cfg.planField] || 0) : 0;
-    }
-    var pct = plan > 0 ? Math.round(fact / plan * 100) : 0;
-    return { name: f.name, fact: fact, plan: plan, pct: pct };
-  }).sort(function(a, b) { return b.fact - a.fact; });
+    var r = { name: f.name, f: f };
 
+    if (metricKey === 'avgcheck') {
+      r.fact = f.fact.avgCheck || 0;
+      r.plan = (f.plan.clients > 0 && f.plan.atelie > 0) ? Math.round(f.plan.atelie / f.plan.clients) : 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      r.clients = f.fact.clients || 0;
+    } else if (metricKey === 'clients') {
+      r.fact = f.fact.clients || 0;
+      r.plan = f.plan.clients || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      if (isCurrentMonth && dayOfMonth > 0) {
+        r.forecast = Math.round(r.fact / dayOfMonth * daysInMonth);
+        r.dailyNeed = daysLeft > 0 ? Math.max(0, Math.round((r.plan - r.fact) / daysLeft)) : 0;
+        r.shortfall = Math.max(0, r.plan - r.forecast);
+      }
+    } else if (metricKey === 'forecast') {
+      var fc = calcForecast3Weeks(f.fact.total, month);
+      r.fact = fc ? fc.total : f.fact.total;
+      r.plan = f.plan.total || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      r.shortfall = Math.max(0, r.plan - r.fact);
+      if (isCurrentMonth && daysLeft > 0) {
+        r.dailyCurrent = Math.round(f.fact.total / dayOfMonth);
+        r.dailyNeed = Math.max(0, Math.round((r.plan - f.fact.total) / daysLeft));
+        r.dailyExtra = Math.max(0, r.dailyNeed - r.dailyCurrent);
+      }
+    } else if (metricKey === 'profit') {
+      r.fact = f.fact.profit || 0;
+      r.revenue = f.fact.total || 0;
+      r.marginPct = r.revenue > 0 ? Math.round(r.fact / r.revenue * 100) : 0;
+      r.plan = 0; r.pct = 0;
+    } else if (metricKey === 'atelie') {
+      r.fact = f.fact.atelie || 0;
+      r.plan = f.plan.atelie || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      if (isCurrentMonth && dayOfMonth > 0) {
+        var fcA = calcForecast3Weeks(f.fact.atelie, month);
+        r.forecast = fcA ? fcA.total : r.fact;
+        r.forecastPct = r.plan > 0 ? Math.round(r.forecast / r.plan * 100) : 0;
+        r.shortfall = Math.max(0, r.plan - r.forecast);
+      }
+    } else { // total
+      r.fact = f.fact.total || 0;
+      r.plan = f.plan.total || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      if (isCurrentMonth && dayOfMonth > 0) {
+        var fcT = calcForecast3Weeks(f.fact.total, month);
+        r.forecast = fcT ? fcT.total : r.fact;
+        r.forecastPct = r.plan > 0 ? Math.round(r.forecast / r.plan * 100) : 0;
+        r.shortfall = Math.max(0, r.plan - r.forecast);
+      }
+    }
+    return r;
+  });
+
+  // Sort
+  if (metricKey === 'profit') rows.sort(function(a, b) { return b.marginPct - a.marginPct; });
+  else rows.sort(function(a, b) { return b.fact - a.fact; });
+
+  // ── Totals ──
   var totalFact, totalPlan, totalPct;
   if (metricKey === 'avgcheck') {
-    // Средний чек сети = общий avgCheck
     totalFact = data.totals.fact.avgCheck || 0;
-    totalPlan = 0;
-    totalPct = 0;
+    var tPlanCl = data.totals.plan ? (data.totals.plan.clients || 0) : 0;
+    var tPlanAt = data.totals.plan ? (data.totals.plan.atelie || 0) : 0;
+    totalPlan = tPlanCl > 0 ? Math.round(tPlanAt / tPlanCl) : 0;
+    totalPct = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
+  } else if (metricKey === 'profit') {
+    totalFact = data.totals.fact.profit || 0;
+    totalPlan = data.totals.fact.total || 0;
+    totalPct = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
   } else {
     totalFact = rows.reduce(function(s, r) { return s + r.fact; }, 0);
     totalPlan = rows.reduce(function(s, r) { return s + r.plan; }, 0);
     totalPct = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
   }
-  var maxFact = rows[0] ? rows[0].fact : 1;
-  var fmtV = function(v) { return cfg.fmt === 'count' ? v.toLocaleString('ru-RU') : fmtShort(v); };
+  var maxFact = Math.max.apply(null, rows.map(function(r) { return metricKey === 'profit' ? Math.abs(r.fact) : r.fact; })) || 1;
 
-  var rowsHtml = rows.map(function(r) {
-    var barW = maxFact > 0 ? Math.round(r.fact / maxFact * 100) : 0;
-    var zc = r.pct >= 95 ? '#22C55E' : r.pct >= 85 ? '#FFAA00' : '#FF4D4D';
-    return '<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
-      '<span style="font-size:13px;font-weight:600;">' + r.name + '</span><span style="font-size:13px;font-weight:800;">' + fmtV(r.fact) + '</span></div>' +
-      '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;"><div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
-      '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;"><span>план ' + fmtV(r.plan) + '</span><span style="color:' + zc + ';font-weight:700;">' + r.pct + '%</span></div></div>';
-  }).join('');
+  // ── Render rows per metric ──
+  var rowsHtml = '';
+
+  if (metricKey === 'avgcheck') {
+    rows.forEach(function(r) {
+      var barW = maxFact > 0 ? Math.round(r.fact / maxFact * 100) : 0;
+      var zc = r.plan > 0 ? (r.pct >= 100 ? '#22C55E' : r.pct >= 90 ? '#FFAA00' : '#FF4D4D') : '#888';
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;">' + fmt(r.fact) + '</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>' + r.clients + ' кл \u00b7 план ' + (r.plan > 0 ? fmt(r.plan) : '\u2014') + '</span>' +
+          '<span style="color:' + zc + ';font-weight:700;">' + (r.plan > 0 ? r.pct + '%' : '') + '</span></div></div>';
+    });
+
+  } else if (metricKey === 'clients') {
+    rows.forEach(function(r) {
+      var barW = maxFact > 0 ? Math.round(r.fact / maxFact * 100) : 0;
+      var zc = r.pct >= 95 ? '#22C55E' : r.pct >= 85 ? '#FFAA00' : '#FF4D4D';
+      var extra = '';
+      if (r.forecast !== undefined && isCurrentMonth) {
+        var fcOk = r.forecast >= r.plan;
+        extra = '<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px;">' +
+          '<span style="color:' + (fcOk ? '#22C55E' : '#FF4D4D') + ';">' + (fcOk ? '\uD83D\uDFE2' : '\uD83D\uDD34') + ' прогноз ' + r.forecast + ' кл</span>' +
+          (r.dailyNeed > 0
+            ? '<span style="color:#E17055;font-weight:600;">нужно ' + r.dailyNeed + ' кл/день</span>'
+            : '<span style="color:#22C55E;font-weight:600;">\u2713 в плане</span>') +
+        '</div>';
+      }
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;">' + r.fact + '</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>план ' + r.plan + '</span>' +
+          '<span style="color:' + zc + ';font-weight:700;">' + r.pct + '%</span></div>' +
+        extra + '</div>';
+    });
+
+  } else if (metricKey === 'profit') {
+    rows.forEach(function(r) {
+      var mc = r.marginPct >= 50 ? '#22C55E' : r.marginPct >= 40 ? '#FFAA00' : '#FF4D4D';
+      var barW = Math.min(Math.max(r.marginPct, 0), 100);
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;color:' + mc + ';">' + r.marginPct + '%</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + mc + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>выручка ' + fmtShort(r.revenue) + '</span>' +
+          '<span>прибыль ' + fmtShort(r.fact) + '</span></div></div>';
+    });
+
+  } else if (metricKey === 'forecast') {
+    rows.forEach(function(r) {
+      var barW = r.plan > 0 ? Math.min(Math.round(r.fact / r.plan * 100), 100) : 0;
+      var zc = r.pct >= 95 ? '#22C55E' : r.pct >= 85 ? '#FFAA00' : '#FF4D4D';
+      var extra = '';
+      if (isCurrentMonth && r.dailyNeed !== undefined) {
+        var shortStr = r.shortfall > 0 ? 'не хватает ' + fmtShort(r.shortfall) : '\u2713 перевыполнение';
+        var needStr = r.dailyNeed > 0 ? 'нужно ' + fmtShort(r.dailyNeed) + '/день' : '\u2713 темп ок';
+        var needColor = r.dailyExtra > 0 ? '#FF4D4D' : '#22C55E';
+        extra = '<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px;">' +
+          '<span style="color:#888;">' + shortStr + '</span>' +
+          '<span style="color:' + needColor + ';font-weight:600;">' + needStr + '</span></div>';
+        if (r.dailyExtra > 0) {
+          extra += '<div style="font-size:9px;color:#aaa;margin-top:1px;">сейчас ' + fmtShort(r.dailyCurrent) + '/день \u2192 нужно +' + fmtShort(r.dailyExtra) + '/день</div>';
+        }
+      }
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;">' + fmtShort(r.fact) + '</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>план ' + fmtShort(r.plan) + '</span>' +
+          '<span style="color:' + zc + ';font-weight:700;">' + r.pct + '%</span></div>' +
+        extra + '</div>';
+    });
+
+  } else {
+    // atelie, total — with forecast + shortfall
+    rows.forEach(function(r) {
+      var barW = maxFact > 0 ? Math.round(r.fact / maxFact * 100) : 0;
+      var zc = r.pct >= 95 ? '#22C55E' : r.pct >= 85 ? '#FFAA00' : '#FF4D4D';
+      var extra = '';
+      if (isCurrentMonth && r.forecast !== undefined) {
+        var fcOk = r.forecastPct >= 95;
+        var fcEmoji = r.forecastPct >= 95 ? '\uD83D\uDFE2' : r.forecastPct >= 85 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+        var shortStr = r.shortfall > 0 ? 'не хватает ' + fmtShort(r.shortfall) : '\u2713 перевып.';
+        extra = '<div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:2px;">' +
+          '<span>' + fcEmoji + ' прогноз ' + fmtShort(r.forecast) + ' (' + r.forecastPct + '%)</span>' +
+          '<span>' + shortStr + '</span></div>';
+      }
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;">' + fmtShort(r.fact) + '</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>план ' + fmtShort(r.plan) + '</span>' +
+          '<span style="color:' + zc + ';font-weight:700;">' + r.pct + '%</span></div>' +
+        extra + '</div>';
+    });
+  }
+
+  // ── Header values per metric ──
+  var headerVals = '';
+  var headerSub = totalPct + '% плана';
+
+  if (metricKey === 'profit') {
+    var tMargin = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : 0;
+    headerSub = '\u043C\u0430\u0440\u0436\u0438\u043D\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043F\u043E \u0444\u0438\u043B\u0438\u0430\u043B\u0430\u043C';
+    headerVals = '<div style="display:flex;gap:16px;margin-top:12px;">' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u0412\u042B\u0420\u0423\u0427\u041A\u0410</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalPlan) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041F\u0420\u0418\u0411\u042B\u041B\u042C</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalFact) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041C\u0410\u0420\u0416\u0410</div><div style="font-size:22px;font-weight:800;">' + tMargin + '%</div></div></div>';
+  } else if (metricKey === 'avgcheck') {
+    headerVals = '<div style="display:flex;gap:16px;margin-top:12px;">' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u0424\u0410\u041A\u0422</div><div style="font-size:22px;font-weight:800;">' + fmt(totalFact) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041F\u041B\u0410\u041D</div><div style="font-size:22px;font-weight:800;">' + (totalPlan > 0 ? fmt(totalPlan) : '\u2014') + '</div></div>' +
+      (totalPlan > 0 ? '<div><div style="font-size:10px;opacity:0.8;">%</div><div style="font-size:22px;font-weight:800;">' + totalPct + '%</div></div>' : '') + '</div>';
+  } else if (metricKey === 'clients' && isCurrentMonth) {
+    var tForecast = Math.round(totalFact / dayOfMonth * daysInMonth);
+    var tDailyNeed = daysLeft > 0 ? Math.max(0, Math.round((totalPlan - totalFact) / daysLeft)) : 0;
+    headerVals = '<div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u0424\u0410\u041A\u0422</div><div style="font-size:20px;font-weight:800;">' + totalFact + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041F\u041B\u0410\u041D</div><div style="font-size:20px;font-weight:800;">' + totalPlan + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041F\u0420\u041E\u0413\u041D\u041E\u0417</div><div style="font-size:20px;font-weight:800;">' + tForecast + '</div></div>' +
+      (tDailyNeed > 0 ? '<div><div style="font-size:10px;opacity:0.8;">\u041D\u0423\u0416\u041D\u041E/\u0414\u0415\u041D\u042C</div><div style="font-size:20px;font-weight:800;color:#FFD700;">' + tDailyNeed + '</div></div>' : '') + '</div>';
+  } else {
+    headerVals = '<div style="display:flex;gap:16px;margin-top:12px;">' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u0424\u0410\u041A\u0422</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalFact) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">\u041F\u041B\u0410\u041D</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalPlan) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">%</div><div style="font-size:22px;font-weight:800;">' + totalPct + '%</div></div></div>';
+  }
+
+  var progressBar = metricKey !== 'profit' && totalPlan > 0
+    ? '<div style="background:rgba(255,255,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-top:10px;"><div style="height:100%;width:' + Math.min(totalPct, 100) + '%;background:white;border-radius:8px;"></div></div>'
+    : '';
+
+  // ── Disclaimer for profit ──
+  var disclaimer = '';
+  if (metricKey === 'profit') {
+    disclaimer = '<div style="padding:0 14px 10px;font-size:10px;color:#aaa;text-align:center;">\u26A0\uFE0F \u041F\u0440\u0438\u0431\u044B\u043B\u044C \u043F\u043E \u0434\u0430\u043D\u043D\u044B\u043C Google Sheets (K9). \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0444\u043E\u0440\u043C\u0443\u043B\u044B \u0432 \u0442\u0430\u0431\u043B\u0438\u0446\u0435 \u0435\u0441\u043B\u0438 \u0446\u0438\u0444\u0440\u044B \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B</div>';
+  }
 
   var overlay = getOverlay('networkOverlay');
   overlay.querySelector('.overlay-panel').innerHTML =
     '<div class="overlay-handle"></div>' +
     '<div style="background:linear-gradient(135deg,' + cfg.color + ',' + cfg.color + 'CC);color:white;padding:16px 18px 18px;margin-top:8px;">' +
       '<div style="font-size:18px;font-weight:800;">' + cfg.title + '</div>' +
-      '<div style="font-size:13px;opacity:0.85;margin-top:3px;">' + MONTH_NAMES_CAP[month] + ' 2026 \u00b7 ' + totalPct + '% плана</div>' +
-      '<div style="display:flex;gap:16px;margin-top:12px;">' +
-        '<div><div style="font-size:10px;opacity:0.8;">ФАКТ</div><div style="font-size:22px;font-weight:800;">' + fmtV(totalFact) + '</div></div>' +
-        '<div><div style="font-size:10px;opacity:0.8;">ПЛАН</div><div style="font-size:22px;font-weight:800;">' + fmtV(totalPlan) + '</div></div>' +
-        '<div><div style="font-size:10px;opacity:0.8;">%</div><div style="font-size:22px;font-weight:800;">' + totalPct + '%</div></div>' +
-      '</div>' +
-      '<div style="background:rgba(255,255,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-top:10px;"><div style="height:100%;width:' + Math.min(totalPct, 100) + '%;background:white;border-radius:8px;"></div></div>' +
+      '<div style="font-size:13px;opacity:0.85;margin-top:3px;">' + MONTH_NAMES_CAP[month] + ' ' + selYear + ' \u00b7 ' + headerSub + '</div>' +
+      headerVals + progressBar +
     '</div>' +
-    '<div style="padding:14px;"><div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">По филиалам</div>' + rowsHtml + '</div>' +
-    '<div class="overlay-close" onclick="closeOverlay(\'networkOverlay\')">Закрыть</div>';
+    '<div style="padding:14px;"><div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">\u041F\u043E \u0444\u0438\u043B\u0438\u0430\u043B\u0430\u043C</div>' + rowsHtml + '</div>' +
+    disclaimer +
+    '<div class="overlay-close" onclick="closeOverlay(\'networkOverlay\')">\u0417\u0430\u043A\u0440\u044B\u0442\u044C</div>';
 
   showOverlay('networkOverlay');
 }
@@ -1253,4 +1418,147 @@ function rscLoadCached() {
       renderRsc();
     }
   } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATE NAVIGATION — Шаг 7: выбор дат
+// ═══════════════════════════════════════════════════════════════
+
+function bizNavMonth(delta) {
+  var mSel = document.getElementById('bizMonthSelect');
+  var ySel = document.getElementById('bizYearSelect');
+  if (!mSel || !ySel) return;
+  var m = parseInt(mSel.value) + delta;
+  var y = parseInt(ySel.value);
+  if (m < 1) { m = 12; y--; }
+  else if (m > 12) { m = 1; y++; }
+  if (y < 2025) y = 2025;
+  if (y > 2026) y = 2026;
+  mSel.value = m;
+  ySel.value = y;
+  bizEnforceDateLimits();
+  loadBranches();
+}
+
+function bizNavToday() {
+  var now = new Date();
+  var mSel = document.getElementById('bizMonthSelect');
+  var ySel = document.getElementById('bizYearSelect');
+  if (!mSel || !ySel) return;
+  mSel.value = now.getMonth() + 1;
+  ySel.value = now.getFullYear();
+  bizEnforceDateLimits();
+  loadBranches();
+}
+
+function bizEnforceDateLimits() {
+  var now = new Date();
+  var cm = now.getMonth() + 1;
+  var cy = now.getFullYear();
+  var mSel = document.getElementById('bizMonthSelect');
+  var ySel = document.getElementById('bizYearSelect');
+  if (!mSel || !ySel) return;
+  var selY = parseInt(ySel.value);
+  mSel.querySelectorAll('option').forEach(function(o) {
+    o.disabled = selY === cy && parseInt(o.value) > cm;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ENHANCED FILIAL DETAIL — Шаг 7: детали по филиалу
+// ═══════════════════════════════════════════════════════════════
+
+function openFilialDetail(f, month) {
+  var overlay = getOverlay('filialOverlay');
+  var perf = f.performance.total;
+  var zone = perf >= 95 ? 'green' : perf >= 85 ? 'yellow' : 'red';
+  var zoneColor = zone === 'green' ? '#22C55E' : zone === 'yellow' ? '#FFAA00' : '#FF4D4D';
+  var nowMonth = new Date().getMonth() + 1;
+  var isPast = month < nowMonth;
+  var fc3 = !isPast ? calcForecast3Weeks(f.fact.total, month) : null;
+  var fcTotal = fc3 ? fc3.total : f.fact.total;
+  var fcPct = f.plan.total > 0 ? Math.round(fcTotal / f.plan.total * 100) : 0;
+  var perfAtelie = f.performance.atelie || 0;
+  var perfHimch = f.performance.himchistka || 0;
+
+  var yearSel = document.getElementById('bizYearSelect');
+  var year = yearSel ? parseInt(yearSel.value) : 2026;
+
+  var html =
+    '<div class="overlay-handle"></div>' +
+    '<div class="filial-detail-header">' +
+      '<div class="filial-detail-name">' + f.name + '</div>' +
+      '<div class="filial-detail-sub">' + MONTH_NAMES_CAP[month] + ' ' + year +
+        ' \u00b7 ' + perf + '% плана' +
+        (isPast ? ' \u00b7 закрыт' : ' \u00b7 прогноз ' + fcPct + '%') +
+      '</div>' +
+    '</div>' +
+    '<div class="filial-detail-stats">' +
+      '<div class="filial-detail-stat">' +
+        '<div class="filial-detail-stat-label">Ателье</div>' +
+        '<div class="filial-detail-stat-value">' + fmtShort(f.fact.atelie) + '</div>' +
+        '<div class="filial-detail-stat-sub" style="color:' + (perfAtelie >= 95 ? 'var(--green)' : perfAtelie >= 85 ? '#FFAA00' : 'var(--red)') + ';">' + perfAtelie + '% плана</div>' +
+      '</div>' +
+      '<div class="filial-detail-stat">' +
+        '<div class="filial-detail-stat-label">Ср. чек</div>' +
+        '<div class="filial-detail-stat-value">' + fmt(f.fact.avgCheck) + '</div>' +
+        '<div class="filial-detail-stat-sub">' + (f.fact.clients || 0) + ' клиентов</div>' +
+      '</div>' +
+      '<div class="filial-detail-stat">' +
+        '<div class="filial-detail-stat-label">' + (isPast ? 'Итог' : 'Прогноз') + '</div>' +
+        '<div class="filial-detail-stat-value" style="color:' + zoneColor + ';">' + fmtShort(fcTotal) + '</div>' +
+        '<div class="filial-detail-stat-sub">' + fcPct + '% плана</div>' +
+      '</div>' +
+    '</div>';
+
+  // Performance bars
+  html += '<div class="filial-detail-section">' +
+    '<div class="filial-detail-section-title">&#x1F4CA; Выполнение плана</div>';
+  var metrics = [
+    {label: 'Ателье', fact: f.fact.atelie, plan: f.plan.atelie, pct: perfAtelie},
+    {label: 'Химч', fact: f.fact.himchistka || 0, plan: f.plan.himchistka || 0, pct: perfHimch},
+    {label: 'Итого', fact: f.fact.total, plan: f.plan.total, pct: perf}
+  ];
+  metrics.forEach(function(m) {
+    var barColor = m.pct >= 95 ? 'var(--green)' : m.pct >= 85 ? '#FFAA00' : 'var(--red)';
+    var barW = Math.min(m.pct, 100);
+    html += '<div class="filial-detail-bar-row">' +
+      '<div class="filial-detail-bar-label">' + m.label + '</div>' +
+      '<div class="filial-detail-bar-wrap">' +
+        '<div class="filial-detail-bar-fill" style="width:' + barW + '%;background:' + barColor + ';">' + (barW > 15 ? m.pct + '%' : '') + '</div>' +
+      '</div>' +
+      '<div class="filial-detail-bar-val">' + fmtShort(m.fact) + '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  // Financial summary
+  html += '<div class="filial-detail-section">' +
+    '<div class="filial-detail-section-title">&#x1F4B0; Финансы</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>Выручка</span><strong>' + fmt(f.fact.total) + '</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>Прибыль</span><strong style="color:' + (f.fact.profit >= 0 ? 'var(--green)' : 'var(--red)') + ';">' + fmt(f.fact.profit) + '</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:var(--text-3);"><span>Маржа</span><strong>' + (f.fact.total > 0 ? Math.round(f.fact.profit / f.fact.total * 100) : 0) + '%</strong></div>';
+
+  var fex = getFilialExpenses()[f.name];
+  if (fex) {
+    var realMargin = f.fact.profit - fex.commission;
+    var rmPct = f.fact.total > 0 ? Math.round(realMargin / f.fact.total * 100) : 0;
+    html += '<div style="border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>Эквайринг</span><strong style="color:var(--red);">\u2212' + fmt(fex.commission) + '</strong></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="font-weight:700;">Реал. маржа</span><strong style="color:' + (rmPct >= 40 ? 'var(--green)' : rmPct >= 25 ? '#FFAA00' : 'var(--red)') + ';">' + fmt(realMargin) + ' (' + rmPct + '%)</strong></div>' +
+    '</div>';
+  }
+  html += '</div>';
+
+  // Weekly revenue chart
+  html += '<div class="filial-detail-section">' +
+    '<div class="filial-detail-section-title">&#x1F4C8; Выручка по неделям</div>' +
+    '<div id="weekRevChart"><div class="loading-box" style="padding:20px;"><div class="spinner"></div></div></div>' +
+  '</div>';
+
+  html += '<div class="overlay-close" onclick="closeOverlay(\'filialOverlay\')">Закрыть</div>';
+
+  overlay.querySelector('.overlay-panel').innerHTML = html;
+  showOverlay('filialOverlay');
+  loadBranchDailyData(f, month, zoneColor);
 }

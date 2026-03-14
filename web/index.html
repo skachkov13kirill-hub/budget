@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=9">
-<title>DressCode · Финансы v4</title>
+<link rel="stylesheet" href="css/app.css?v=10">
+<title>DressCode · Дашборд</title>
 </head>
 <body>
 
 <!-- HEADER -->
 <header class="app-header">
   <div>
-    <div class="app-title">DressCode · Финансы</div>
+    <div class="app-title">DressCode</div>
     <div class="app-subtitle" id="headerSubtitle">Загрузка...</div>
   </div>
   <div class="header-right">
@@ -22,55 +22,37 @@
 </header>
 
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="switchTab('home',this)" id="nav-home">
-    <span class="nav-icon">&#x1F3E0;</span>Главная
-  </button>
-  <button class="nav-btn" onclick="switchTab('business',this)" id="nav-business">
+  <button class="nav-btn active" onclick="switchTab('business',this)" id="nav-business">
     <span class="nav-icon">&#x1F3E2;</span>Бизнес
   </button>
-  <button class="nav-btn" onclick="switchTab('family',this)" id="nav-family">
-    <span class="nav-icon">&#x1F46A;</span>Семья
+  <button class="nav-btn" onclick="switchTab('payments',this)" id="nav-payments">
+    <span class="nav-icon">&#x1F4B3;</span>Платежи
+  </button>
+  <button class="nav-btn" onclick="switchTab('tasks',this)" id="nav-tasks">
+    <span class="nav-icon">&#x2705;</span>Задачи
   </button>
 </nav>
 
-<!-- TAB: ГЛАВНАЯ -->
-<div class="main-tab active" id="tab-home">
-  <div class="free-money-card" id="freeMoneyContent">
-    <div class="free-money-title">&#x1F4B0; Свободные деньги</div>
-    <div style="font-size:13px;opacity:0.5;margin-top:8px;">Загрузка данных...</div>
-  </div>
-  <div class="mini-cards">
-    <div class="mini-card" id="miniCardBiz" onclick="switchTab('business',document.getElementById('nav-business'))">
-      <div class="mini-card-icon">&#x1F3E2;</div>
-      <div class="mini-card-label">Бизнес</div>
-      <div class="mini-card-value">&mdash;</div>
-      <div class="mini-card-sub">загрузка...</div>
-    </div>
-    <div class="mini-card" id="miniCardFamily" onclick="switchTab('family',document.getElementById('nav-family'))">
-      <div class="mini-card-icon">&#x1F46A;</div>
-      <div class="mini-card-label">Семья</div>
-      <div class="mini-card-value">&mdash;</div>
-      <div class="mini-card-sub">загрузка...</div>
-    </div>
-  </div>
-  <div class="card" id="card-credits">
-    <div class="card-header">&#x1F4B3; Кредиты &mdash; <span id="creditsMonthName">март</span></div>
-    <div id="creditsChecklist"><div class="loading-box"><div class="spinner"></div></div></div>
-  </div>
-</div>
-
 <!-- TAB: БИЗНЕС -->
-<div class="main-tab" id="tab-business">
-  <div class="month-select">
-    <span style="font-weight:600;">Месяц:</span>
-    <select id="bizMonthSelect" onchange="loadBranches()">
-      <option value="1">Январь</option><option value="2">Февраль</option>
-      <option value="3">Март</option><option value="4">Апрель</option>
-      <option value="5">Май</option><option value="6">Июнь</option>
-      <option value="7">Июль</option><option value="8">Август</option>
-      <option value="9">Сентябрь</option><option value="10">Октябрь</option>
-      <option value="11">Ноябрь</option><option value="12">Декабрь</option>
-    </select>
+<div class="main-tab active" id="tab-business">
+  <div class="biz-date-nav">
+    <button class="biz-date-arrow" onclick="bizNavMonth(-1)">&larr;</button>
+    <div class="biz-date-selectors">
+      <select id="bizMonthSelect" onchange="loadBranches()">
+        <option value="1">Январь</option><option value="2">Февраль</option>
+        <option value="3">Март</option><option value="4">Апрель</option>
+        <option value="5">Май</option><option value="6">Июнь</option>
+        <option value="7">Июль</option><option value="8">Август</option>
+        <option value="9">Сентябрь</option><option value="10">Октябрь</option>
+        <option value="11">Ноябрь</option><option value="12">Декабрь</option>
+      </select>
+      <select id="bizYearSelect" onchange="loadBranches()">
+        <option value="2025">2025</option>
+        <option value="2026" selected>2026</option>
+      </select>
+    </div>
+    <button class="biz-date-arrow" onclick="bizNavMonth(1)">&rarr;</button>
+    <button class="biz-date-today" onclick="bizNavToday()">Сегодня</button>
   </div>
   <div id="bizLoading"><div class="loading-box"><div class="spinner"></div><p>Загрузка филиалов...</p></div></div>
   <div id="bizError" style="display:none;"></div>
@@ -97,43 +79,91 @@
   <div id="filialsGrid"></div>
 </div>
 
-<!-- TAB: СЕМЬЯ -->
-<div class="main-tab" id="tab-family">
-  <div class="fam-header">
-    <span>&#x1F46A; Семейный бюджет</span>
-    <div class="fam-actions">
-      <button class="fam-btn" onclick="openFamilyUpload()" title="Загрузить PDF">&#x1F4E4; PDF</button>
-      <button class="fam-btn" onclick="openTrashOverlay()" title="Корзина">&#x1F5D1;&#xFE0F; <span id="trashCount"></span></button>
-      <button class="fam-btn" onclick="syncFamily()" title="Синхронизация">&#x2601;&#xFE0F;</button>
+<!-- TAB: ПЛАТЕЖИ -->
+<div class="main-tab" id="tab-payments">
+  <div class="payments-header">
+    <span>&#x1F4B3; Платежи &mdash; <span id="paymentsMonthName">март</span></span>
+  </div>
+  <div class="payments-summary" id="paymentsSummary"></div>
+  <div id="paymentsContent">
+    <div class="loading-box"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- TAB: ЗАДАЧИ -->
+<div class="main-tab" id="tab-tasks">
+  <div class="tasks-header">
+    <div class="tasks-view-toggle">
+      <button class="tasks-view-btn active" id="btnViewCal" onclick="tasksSetView('calendar')">Календарь</button>
+      <button class="tasks-view-btn" id="btnViewTree" onclick="tasksSetView('tree')">Доска</button>
+    </div>
+    <div class="tasks-week-nav">
+      <button class="tasks-week-arrow" onclick="tasksChangeWeek(-1)">&larr;</button>
+      <span class="tasks-week-label" id="tasksWeekLabel"></span>
+      <button class="tasks-week-arrow" onclick="tasksChangeWeek(1)">&rarr;</button>
     </div>
   </div>
-  <div id="familyBudgetBar"></div>
-  <div class="fam-filters">
-    <select id="famMonthFilter" onchange="applyFamilyFilters()"></select>
-    <select id="famOwnerFilter" onchange="applyFamilyFilters()">
-      <option value="all">Все</option>
-      <option value="Кирилл">Кирилл</option>
-      <option value="Алёна">Алёна</option>
+  <div class="tasks-stats" id="tasksStats"></div>
+
+  <!-- CALENDAR VIEW -->
+  <div class="tasks-panel active" id="tasksPanelCal">
+    <div class="tasks-day-tabs" id="tasksDayTabs"></div>
+    <div class="tasks-day-content" id="tasksDayContent"></div>
+    <button class="tasks-add-slot-btn" onclick="tasksOpenAddSlot()">+ Добавить задачу</button>
+  </div>
+
+  <!-- TREE VIEW -->
+  <div class="tasks-panel" id="tasksPanelTree">
+    <div id="tasksTreeView"></div>
+    <button class="tasks-add-root-btn" onclick="tasksOpenAddNode(null)">+ Новый блок</button>
+  </div>
+</div>
+
+<!-- TASK MODALS -->
+<div class="tasks-modal-bg" id="tasksAddSlotModal" onclick="if(event.target===this)tasksCloseModal('tasksAddSlotModal')">
+  <div class="tasks-modal">
+    <div class="tasks-modal-title">Добавить задачу</div>
+    <label class="tasks-modal-label">Название</label>
+    <input type="text" class="tasks-modal-input" id="tasksSlotName" placeholder="Что нужно сделать..." />
+    <label class="tasks-modal-label">Категория</label>
+    <select class="tasks-modal-input" id="tasksSlotCategory">
+      <option value="">— без категории —</option>
+      <option value="КБ">КБ</option>
+      <option value="Мои дела">Мои дела</option>
+      <option value="Семья">Семья</option>
+      <option value="Планирование">Планирование</option>
     </select>
+    <label class="tasks-modal-label">Время</label>
+    <div style="display:flex;gap:8px;">
+      <input type="time" class="tasks-modal-input" id="tasksSlotStart" value="10:00" />
+      <input type="time" class="tasks-modal-input" id="tasksSlotEnd" value="11:00" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksAddSlotModal')">Отмена</button>
+      <button class="tasks-modal-save" onclick="tasksSaveSlot()">Добавить</button>
+    </div>
   </div>
-  <div class="fam-subtabs">
-    <button class="fam-subtab active" onclick="switchFamilySubtab('categories',this)">&#x1F4C1; Категории</button>
-    <button class="fam-subtab" onclick="switchFamilySubtab('transactions',this)">&#x1F4DC; Операции</button>
-    <button class="fam-subtab" onclick="switchFamilySubtab('distribution',this)">&#x1F500; Распределение</button>
+</div>
+
+<div class="tasks-modal-bg" id="tasksAddNodeModal" onclick="if(event.target===this)tasksCloseModal('tasksAddNodeModal')">
+  <div class="tasks-modal">
+    <div class="tasks-modal-title" id="tasksAddNodeTitle">Добавить</div>
+    <label class="tasks-modal-label">Название</label>
+    <input type="text" class="tasks-modal-input" id="tasksNodeName" placeholder="Введите название..." />
+    <label class="tasks-modal-label">Цвет</label>
+    <div class="tasks-color-picker" id="tasksColorPicker"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksAddNodeModal')">Отмена</button>
+      <button class="tasks-modal-save" onclick="tasksSaveNode()">Добавить</button>
+    </div>
   </div>
-  <div id="familyContent"></div>
-  <button class="fab-btn" onclick="openManualAdd()" title="Добавить операцию">+</button>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
-<script src="js/app.js?v=9"></script>
-<script src="js/parser.js?v=9"></script>
-<script src="js/overview.js?v=9"></script>
-<script src="js/business.js?v=9"></script>
-<script src="js/family.js?v=9"></script>
-<script src="js/family-features.js?v=9"></script>
+<script src="js/app.js?v=12"></script>
+<script src="js/payments.js?v=12"></script>
+<script src="js/tasks.js?v=12"></script>
+<script src="js/business.js?v=13"></script>
 </body>
 </html>
