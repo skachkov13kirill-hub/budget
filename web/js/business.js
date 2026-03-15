@@ -7,6 +7,17 @@
 function renderBizOverview(data) {
   if (!data || !data.totals) return;
   var t = data.totals;
+
+  // Рассчитываем план на текущий день
+  var now = new Date();
+  var month = data.currentMonth || (now.getMonth() + 1);
+  var yearSel = document.getElementById('bizYearSelect');
+  var year = yearSel ? parseInt(yearSel.value) : now.getFullYear();
+  var isCurrentMonth = (now.getMonth() + 1) === month && now.getFullYear() === year;
+  var daysInMonth = new Date(year, month, 0).getDate();
+  var daysWithData = isCurrentMonth ? Math.max(1, now.getDate() - 1) : daysInMonth;
+  var dayRatio = daysWithData / daysInMonth; // доля месяца с данными
+
   document.getElementById('ov-atelie').textContent = fmt(t.fact.atelie);
   document.getElementById('ov-himch').textContent = fmt(t.fact.avgCheck || 0);
   document.getElementById('ov-clients').textContent = t.fact.clients.toLocaleString('ru-RU');
@@ -17,25 +28,44 @@ function renderBizOverview(data) {
   document.getElementById('ov-total').textContent = fmt(t.fact.total || totalWithHimch);
 
   if (t.plan.total > 0) {
-    document.getElementById('ov-atelie-plan').textContent = 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
+    // План на текущий день (пропорционально)
+    var planAtelieToday = Math.round((t.plan.atelie || 0) * dayRatio);
+    var planTotalToday = Math.round(t.plan.total * dayRatio);
+    var pctAtelieToday = planAtelieToday > 0 ? Math.round(t.fact.atelie / planAtelieToday * 100) : 0;
+    var pctTotalToday = planTotalToday > 0 ? Math.round((t.fact.total || totalWithHimch) / planTotalToday * 100) : 0;
+
+    var atelieStatus = pctAtelieToday >= 100 ? '\u2705' : pctAtelieToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    var totalStatus = pctTotalToday >= 100 ? '\u2705' : pctTotalToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+
+    document.getElementById('ov-atelie-plan').textContent = isCurrentMonth
+      ? atelieStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
+      : 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
+
     // Средний чек: план = план ателье / план клиентов
     var avgCheckPlan = (t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
     document.getElementById('ov-himch-plan').textContent = avgCheckPlan > 0 ? 'план ' + fmt(avgCheckPlan) : t.fact.clients + ' кл';
-    // Всего: показываем план + химч
-    var planHimch = t.plan.himchistka || 0;
-    var totalPlanFull = t.plan.total + (planHimch > 0 ? 0 : 0); // total уже включает химч
-    document.getElementById('ov-total-plan').textContent = 'План: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)';
+
+    document.getElementById('ov-total-plan').textContent = isCurrentMonth
+      ? totalStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planTotalToday) + ' (' + pctTotalToday + '%)'
+      : 'План: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)';
   }
-  // Клиенты: план + факт
+  // Клиенты: план на текущий день + факт
   if (t.plan && t.plan.clients > 0) {
-    document.getElementById('ov-avg-check').textContent = 'план ' + t.plan.clients + ' \u00b7 ' + t.performance.total + '%';
+    var planClientsToday = Math.round(t.plan.clients * dayRatio);
+    var pctClientsToday = planClientsToday > 0 ? Math.round(t.fact.clients / planClientsToday * 100) : 0;
+    var clientsStatus = pctClientsToday >= 100 ? '\u2705' : pctClientsToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    document.getElementById('ov-avg-check').textContent = isCurrentMonth
+      ? clientsStatus + ' план ' + daysWithData + 'д: ' + planClientsToday + ' (' + pctClientsToday + '%)'
+      : 'план ' + t.plan.clients + ' \u00b7 ' + t.performance.total + '%';
   } else if (t.fact.avgCheck) {
     document.getElementById('ov-avg-check').textContent = 'Ср.чек: ' + fmt(t.fact.avgCheck);
   }
 
-  var pct = t.performance ? Math.min(t.performance.total, 100) : 0;
-  document.getElementById('ov-progress').style.width = pct + '%';
-  document.getElementById('ov-progress').textContent = (t.performance ? t.performance.total : 0) + '%';
+  // Прогресс-бар: по плану на текущий день
+  var planTodayTotal = isCurrentMonth ? Math.round(t.plan.total * dayRatio) : t.plan.total;
+  var pctBar = planTodayTotal > 0 ? Math.min(Math.round((t.fact.total || totalWithHimch) / planTodayTotal * 100), 150) : 0;
+  document.getElementById('ov-progress').style.width = Math.min(pctBar, 100) + '%';
+  document.getElementById('ov-progress').textContent = pctBar + '%';
 
   var netForecast = calcNetworkForecast(data.filials);
   if (netForecast > 0) {
@@ -70,17 +100,18 @@ function renderDailyPulse(data) {
   var isCurrentMonth = (now.getMonth() + 1) === month;
   if (!isCurrentMonth) { el.style.display = 'none'; return; }
 
-  var dayOfMonth = now.getDate();
+  var today = now.getDate();
+  var daysWithData = Math.max(1, today - 1); // вчера = последний закрытый день
   var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
-  var daysLeft = daysInMonth - dayOfMonth;
+  var daysLeft = daysInMonth - daysWithData; // оставшиеся дни (включая сегодня)
 
   var factAtelie = parseFloat(t.fact.atelie) || 0;
   var factHimch = parseFloat(t.fact.himchistka) || 0;
-  if (factAtelie <= 0 || dayOfMonth < 3) { el.style.display = 'none'; return; }
+  if (factAtelie <= 0 || daysWithData < 2) { el.style.display = 'none'; return; }
 
-  // Дневные скорости (на р/с)
-  var dailyBankAtelie = Math.round(factAtelie / 2 / dayOfMonth);
-  var dailyBankHimch = Math.round(factHimch / dayOfMonth);
+  // Дневные скорости (на р/с) — делим на закрытые дни, не на сегодняшний
+  var dailyBankAtelie = Math.round(factAtelie / 2 / daysWithData);
+  var dailyBankHimch = Math.round(factHimch / daysWithData);
   var dailyBank = dailyBankAtelie + dailyBankHimch;
 
   // ДОХОДЫ за месяц (экстраполяция)
@@ -126,7 +157,7 @@ function renderDailyPulse(data) {
     '<div class="card" style="background:white;border-radius:16px;padding:16px;margin-bottom:12px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
         '<div style="font-size:14px;font-weight:700;">&#x1F4B3; На р/с</div>' +
-        '<div style="font-size:11px;color:#888;">' + dayOfMonth + '-й день &#183; осталось ' + daysLeft + '</div>' +
+        '<div style="font-size:11px;color:#888;">данные за ' + daysWithData + ' дн. &#183; осталось ' + daysLeft + '</div>' +
       '</div>' +
 
       // ДОХОДЫ
@@ -251,7 +282,8 @@ function renderPlanner(data) {
   var now = new Date();
   var curMonth = now.getMonth();
   var curYear = now.getFullYear();
-  var dayOfMonth = now.getDate();
+  var today = now.getDate();
+  var daysWithData = Math.max(1, today - 1); // вчера = последний закрытый день
   var dataMonth = (data.currentMonth || (curMonth + 1)) - 1;
 
   if (dataMonth !== curMonth) { el.style.display = 'none'; return; }
@@ -259,15 +291,15 @@ function renderPlanner(data) {
   var t = data.totals;
   var factAtelie = parseFloat(t.fact.atelie) || 0;
   var factHimch = parseFloat(t.fact.himchistka) || 0;
-  if (factAtelie <= 0 || dayOfMonth < 3) { el.style.display = 'none'; return; }
+  if (factAtelie <= 0 || daysWithData < 2) { el.style.display = 'none'; return; }
 
   var daysInCurMonth = getDaysInMonth(curMonth, curYear);
-  var daysLeft = daysInCurMonth - dayOfMonth;
+  var daysLeft = daysInCurMonth - daysWithData; // оставшиеся дни (включая сегодня)
 
-  // ═══ Дневные скорости ═══
-  var dailyAtelie = Math.round(factAtelie / dayOfMonth);        // полный оборот ателье/день
-  var dailyHimch = Math.round(factHimch / dayOfMonth);           // химч/день
-  var dailyBankAtelie = Math.round(factAtelie / 2 / dayOfMonth); // на р/с (ателье÷2)
+  // ═══ Дневные скорости (делим на закрытые дни) ═══
+  var dailyAtelie = Math.round(factAtelie / daysWithData);        // полный оборот ателье/день
+  var dailyHimch = Math.round(factHimch / daysWithData);           // химч/день
+  var dailyBankAtelie = Math.round(factAtelie / 2 / daysWithData); // на р/с (ателье÷2)
   var dailyBankHimch = dailyHimch;                                // на р/с (химч вся)
 
   // Кредиты
@@ -401,7 +433,7 @@ function renderPlanner(data) {
   '</div>';
   html += '<div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">На р/с: <strong style="color:var(--text);">~' + fmtShort(dailyBank) + '/день</strong> (ателье&#247;2 ' + fmtShort(dailyBankAtelie) + ' + химч ' + fmtShort(dailyBankHimch) + ')</div>';
 
-  html += cardBlock('&#x1F4CC;', capMonth(curMonth) + ' (факт)', dayOfMonth + ' дней &#183; ' + fmtShort(dailyBank) + '/день', cur.family, detailBlock(cur, true));
+  html += cardBlock('&#x1F4CC;', capMonth(curMonth) + ' (факт)', daysWithData + ' дн. данных &#183; ' + fmtShort(dailyBank) + '/день', cur.family, detailBlock(cur, true));
   if (plan) {
     html += cardBlock('&#x1F4C8;', capMonth(curMonth) + ' (план)', 'если выполним план', plan.family,
       row('&#x1F4E5; Доходы по плану', fmtShort(plan.totalIncome)) +
@@ -429,7 +461,7 @@ function calcNetworkForecast(filials) {
 function calcForecast3Weeks(factTotal, month) {
   var now = new Date();
   var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
-  var daysPassed = (now.getMonth() + 1) === month ? now.getDate() : ((now.getMonth() + 1) > month ? daysInMonth : 0);
+  var daysPassed = (now.getMonth() + 1) === month ? Math.max(1, now.getDate() - 1) : ((now.getMonth() + 1) > month ? daysInMonth : 0);
   if (daysPassed === 0) return null;
   var nonWork = (month === 1) ? 5 : 0;
   var workPassed = Math.max(1, daysPassed - (month === 1 ? Math.min(nonWork, daysPassed) : 0));
@@ -763,7 +795,7 @@ function openNetworkDetail(metricKey) {
   var yearSel = document.getElementById('bizYearSelect');
   var selYear = yearSel ? parseInt(yearSel.value) : now.getFullYear();
   var isCurrentMonth = (now.getMonth() + 1) === month && now.getFullYear() === selYear;
-  var dayOfMonth = isCurrentMonth ? now.getDate() : new Date(selYear, month, 0).getDate();
+  var dayOfMonth = isCurrentMonth ? Math.max(1, now.getDate() - 1) : new Date(selYear, month, 0).getDate();
   var daysInMonth = new Date(selYear, month, 0).getDate();
   var daysLeft = isCurrentMonth ? daysInMonth - dayOfMonth : 0;
 
@@ -1448,6 +1480,8 @@ function bizNavToday() {
   mSel.value = now.getMonth() + 1;
   ySel.value = now.getFullYear();
   bizEnforceDateLimits();
+  bizSnapIndex = -1;
+  bizIsHistorical = false;
   loadBranches();
 }
 
@@ -1561,4 +1595,107 @@ function openFilialDetail(f, month) {
   overlay.querySelector('.overlay-panel').innerHTML = html;
   showOverlay('filialOverlay');
   loadBranchDailyData(f, month, zoneColor);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DAY BROWSER — навигация по дням (снимки)
+// ═══════════════════════════════════════════════════════════════
+
+var bizSnapList = [];
+var bizSnapIndex = -1; // -1 = live (сегодня)
+
+function bizUpdateDayNav() {
+  var nav = document.getElementById('bizDayNav');
+  if (!nav) return;
+
+  var sel = document.getElementById('bizMonthSelect');
+  var ySel = document.getElementById('bizYearSelect');
+  var month = parseInt(sel.value);
+  var year = ySel ? parseInt(ySel.value) : new Date().getFullYear();
+
+  bizSnapList = getSnapshots(month, year);
+
+  // Always show nav
+  nav.style.display = '';
+  bizUpdateDayLabel();
+}
+
+function bizSnapDay(delta) {
+  if (bizSnapIndex === -1) {
+    // On live data
+    if (delta < 0) {
+      // Go to previous snapshot
+      if (!bizSnapList.length) return;
+      // Find the latest snapshot that's before today
+      var now = new Date();
+      var todayDay = now.getDate();
+      var idx = -1;
+      for (var i = bizSnapList.length - 1; i >= 0; i--) {
+        if (bizSnapList[i].day < todayDay) { idx = i; break; }
+      }
+      if (idx === -1) idx = bizSnapList.length - 1;
+      bizSnapIndex = idx;
+    } else {
+      return; // already at latest
+    }
+  } else {
+    bizSnapIndex += delta;
+    if (bizSnapIndex >= bizSnapList.length || bizSnapIndex < 0) {
+      // Return to live
+      bizSnapIndex = -1;
+      bizIsHistorical = false;
+      loadBranches(true);
+      bizUpdateDayLabel();
+      return;
+    }
+  }
+
+  // Load snapshot
+  var snap = bizSnapList[bizSnapIndex];
+  var data = loadSnapshot(snap.key);
+  if (!data) {
+    showToast('Снимок не найден');
+    bizSnapIndex = -1;
+    return;
+  }
+
+  bizIsHistorical = true;
+  var month = parseInt(document.getElementById('bizMonthSelect').value);
+  applyBranchData(data, month);
+  bizUpdateDayLabel();
+}
+
+function bizUpdateDayLabel() {
+  var label = document.getElementById('bizDayLabel');
+  if (!label) return;
+
+  if (bizSnapIndex === -1) {
+    var now = new Date();
+    var dwd = Math.max(1, now.getDate() - 1);
+    label.textContent = 'данные за ' + dwd + ' ' + MONTH_NAMES[now.getMonth() + 1].substring(0, 3);
+    label.classList.remove('historical');
+    bizIsHistorical = false;
+    // Show pulse/planner
+    var pulse = document.getElementById('dailyPulseCard');
+    var planner = document.getElementById('plannerCard');
+    if (pulse) pulse.style.display = '';
+    if (planner) planner.style.display = '';
+  } else {
+    var snap = bizSnapList[bizSnapIndex];
+    var month = parseInt(document.getElementById('bizMonthSelect').value);
+    label.textContent = snap.day + ' ' + MONTH_NAMES[month].substring(0, 3) + ' (снимок)';
+    label.classList.add('historical');
+    // Hide pulse/planner for historical view
+    var pulse = document.getElementById('dailyPulseCard');
+    var planner = document.getElementById('plannerCard');
+    if (pulse) pulse.style.display = 'none';
+    if (planner) planner.style.display = 'none';
+  }
+}
+
+function bizSnapToday() {
+  bizSnapIndex = -1;
+  bizIsHistorical = false;
+  loadBranches(true);
+  bizUpdateDayLabel();
 }

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=15">
 <title>DressCode · Дашборд</title>
 </head>
 <body>
@@ -53,6 +53,11 @@
     </div>
     <button class="biz-date-arrow" onclick="bizNavMonth(1)">&rarr;</button>
     <button class="biz-date-today" onclick="bizNavToday()">Сегодня</button>
+  </div>
+  <div class="biz-day-nav" id="bizDayNav">
+    <button class="biz-day-arrow" onclick="bizSnapDay(-1)">&larr;</button>
+    <span class="biz-day-label" id="bizDayLabel">Сегодня</span>
+    <button class="biz-day-arrow" onclick="bizSnapDay(1)">&rarr;</button>
   </div>
   <div id="bizLoading"><div class="loading-box"><div class="spinner"></div><p>Загрузка филиалов...</p></div></div>
   <div id="bizError" style="display:none;"></div>
@@ -161,9 +166,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=12"></script>
-<script src="js/payments.js?v=12"></script>
-<script src="js/tasks.js?v=12"></script>
-<script src="js/business.js?v=13"></script>
+<script src="js/app.js?v=15"></script>
+<script src="js/payments.js?v=15"></script>
+<script src="js/tasks.js?v=15"></script>
+<script src="js/business.js?v=15"></script>
 </body>
 </html>

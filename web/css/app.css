@@ -355,6 +355,26 @@ body {
 }
 .biz-date-today:active { opacity: 0.8; }
 
+/* ===== DAY BROWSER ===== */
+.biz-day-nav {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 6px 14px 10px; font-family: inherit;
+}
+.biz-day-arrow {
+  background: var(--surface); border: 1px solid var(--border-strong);
+  color: var(--text-2); padding: 5px 10px; border-radius: var(--r-xs);
+  cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s;
+}
+.biz-day-arrow:active { background: var(--bg); }
+.biz-day-label {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  min-width: 120px; text-align: center;
+}
+.biz-day-label.historical {
+  color: var(--primary); background: var(--primary-glow);
+  padding: 3px 10px; border-radius: var(--r-xs);
+}
+
 /* ===== MONTH SELECT (legacy) ===== */
 .month-select { padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
 .month-select select {

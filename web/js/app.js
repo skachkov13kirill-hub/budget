@@ -85,6 +85,11 @@ function refreshAll() {
     saveCache(state);
     renderAll();
     showLastUpdate();
+    // Save daily snapshot
+    if (state.branches && !bizIsHistorical) {
+      saveSnapshot(state.branches, month, new Date().getFullYear());
+    }
+    if (typeof bizUpdateDayNav === 'function') bizUpdateDayNav();
     btn.classList.remove('spinning');
     showToast('Данные обновлены');
   }).catch(function(err) {
@@ -167,6 +172,61 @@ function applyBranchData(data, month) {
   document.getElementById('bizError').style.display = 'none';
   if (typeof renderBizOverview === 'function') renderBizOverview(data);
   if (typeof renderFilials === 'function') renderFilials(data);
+  // Save daily snapshot
+  if (!bizIsHistorical) {
+    var ySel = document.getElementById('bizYearSelect');
+    var year = ySel ? parseInt(ySel.value) : new Date().getFullYear();
+    saveSnapshot(data, month, year);
+  }
+  if (typeof bizUpdateDayNav === 'function') bizUpdateDayNav();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SNAPSHOT SYSTEM — daily data saves for history browsing
+// ═══════════════════════════════════════════════════════════════
+var bizIsHistorical = false;
+
+function saveSnapshot(data, month, year) {
+  var now = new Date();
+  var key = 'snap_' + year + '_' + month + '_' + now.getDate();
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    // Keep max 60 snapshots
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('snap_') === 0) keys.push(k);
+    }
+    keys.sort();
+    while (keys.length > 60) localStorage.removeItem(keys.shift());
+  } catch(e) {}
+}
+
+function loadSnapshot(key) {
+  try {
+    var raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function getSnapshots(month, year) {
+  var prefix = 'snap_' + year + '_' + month + '_';
+  var snaps = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf(prefix) === 0) {
+      var day = parseInt(k.replace(prefix, ''));
+      if (!isNaN(day)) snaps.push({ key: k, day: day });
+    }
+  }
+  snaps.sort(function(a, b) { return a.day - b.day; });
+  return snaps;
+}
+
+// Number of completed days with finalized revenue (excludes today)
+function getCompletedDays() {
+  return Math.max(1, new Date().getDate() - 1);
 }
 
 // ═══════════════════════════════════════════════════════════════
