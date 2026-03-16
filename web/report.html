@@ -461,13 +461,20 @@ async function submitReport() {
             photo: photoBase64
           })
         });
-        const photoResult = await photoResp.json();
-        if (!photoResult.success) {
-          console.warn('Photo upload failed:', photoResult.error);
+        const photoText = await photoResp.text();
+        try {
+          const photoResult = JSON.parse(photoText);
+          if (!photoResult.success) {
+            showStatus('Фото не загружено: ' + (photoResult.error || 'неизвестная ошибка'), 'error');
+            return;
+          }
+        } catch(parseErr) {
+          showStatus('Ошибка фото: ' + photoText.substring(0, 100), 'error');
+          return;
         }
       } catch (photoErr) {
-        console.warn('Photo upload error:', photoErr);
-        // Don't fail the whole report if photo fails
+        showStatus('Ошибка загрузки фото: ' + photoErr.message, 'error');
+        return;
       }
     }
 
