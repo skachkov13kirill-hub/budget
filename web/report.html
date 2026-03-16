@@ -437,7 +437,9 @@ async function submitReport() {
         branch: branch.sheet,
         date: dateVal,
         atelie: atelie,
-        clients: clients
+        clients: clients,
+        cash: cash,
+        card: card
       })
     });
     const result = await resp.json();
@@ -473,7 +475,7 @@ async function submitReport() {
     saveToHistory(dateVal, atelie, clients);
 
     // 4. Success
-    showStatus(`Записано: ${atelie.toLocaleString('ru-RU')}₽, ${clients} кл.`, 'success');
+    showStatus(`Записано: ${atelie.toLocaleString('ru-RU')}₽, ${clients} кл., нал ${cash.toLocaleString('ru-RU')}₽, безнал ${card.toLocaleString('ru-RU')}₽`, 'success');
 
     // Clear form
     document.getElementById('atelie').value = '';
