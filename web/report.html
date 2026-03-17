@@ -482,11 +482,10 @@ async function submitReport() {
       throw new Error(result.error || 'Ошибка записи');
     }
 
-    // 2. Upload photo if present
+    // 2. Upload photo if present (тихая отправка — ошибки не показываем)
     if (photoBase64) {
-      showStatus('Загружаю фото...', 'loading');
       try {
-        const photoResp = await fetch(APPS_SCRIPT_URL + '?action=uploadReportPhoto', {
+        fetch(APPS_SCRIPT_URL + '?action=uploadReportPhoto', {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({
@@ -495,20 +494,8 @@ async function submitReport() {
             photo: photoBase64
           })
         });
-        const photoText = await photoResp.text();
-        try {
-          const photoResult = JSON.parse(photoText);
-          if (!photoResult.success) {
-            showStatus('Фото не загружено: ' + (photoResult.error || 'неизвестная ошибка'), 'error');
-            return;
-          }
-        } catch(parseErr) {
-          showStatus('Ошибка фото: ' + photoText.substring(0, 100), 'error');
-          return;
-        }
-      } catch (photoErr) {
-        showStatus('Ошибка загрузки фото: ' + photoErr.message, 'error');
-        return;
+      } catch (e) {
+        // тихо игнорируем ошибку фото
       }
     }
 
