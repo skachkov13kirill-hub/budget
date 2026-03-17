@@ -345,6 +345,32 @@ function showForm() {
       <div class="field-suffix">рублей</div>
     </div>
 
+    <div style="text-align:center;padding:12px 0 4px;font-size:13px;font-weight:600;color:#8b5cf6;text-transform:uppercase;letter-spacing:1px;">Химчистка</div>
+
+    <div class="card">
+      <div class="field-label">Оборот химчистки</div>
+      <input type="number" id="hcAtelie" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Клиенты химчистки</div>
+      <input type="number" id="hcClients" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">человек</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Наличные ХЧ</div>
+      <input type="number" id="hcCash" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Безналичные ХЧ</div>
+      <input type="number" id="hcCard" class="field-input" placeholder="0" inputmode="numeric">
+      <div class="field-suffix">рублей</div>
+    </div>
+
     <div class="card">
       <div class="field-label">Фото отчёта</div>
       <div class="photo-area" id="photoArea" onclick="document.getElementById('photoInput').click()">
@@ -419,6 +445,10 @@ async function submitReport() {
   const clients = parseInt(document.getElementById('clients').value);
   const cash = parseInt(document.getElementById('cash').value) || 0;
   const card = parseInt(document.getElementById('card').value) || 0;
+  const hcAtelie = parseInt(document.getElementById('hcAtelie').value) || 0;
+  const hcClients = parseInt(document.getElementById('hcClients').value) || 0;
+  const hcCash = parseInt(document.getElementById('hcCash').value) || 0;
+  const hcCard = parseInt(document.getElementById('hcCard').value) || 0;
 
   // Validate
   if (!dateVal) { showStatus('Укажите дату', 'error'); return; }
@@ -439,7 +469,11 @@ async function submitReport() {
         atelie: atelie,
         clients: clients,
         cash: cash,
-        card: card
+        card: card,
+        hcAtelie: hcAtelie || undefined,
+        hcClients: hcClients || undefined,
+        hcCash: hcCash || undefined,
+        hcCard: hcCard || undefined
       })
     });
     const result = await resp.json();
@@ -482,13 +516,17 @@ async function submitReport() {
     saveToHistory(dateVal, atelie, clients);
 
     // 4. Success
-    showStatus(`Записано: ${atelie.toLocaleString('ru-RU')}₽, ${clients} кл., нал ${cash.toLocaleString('ru-RU')}₽, безнал ${card.toLocaleString('ru-RU')}₽`, 'success');
+    showStatus('✅ Данные записаны\nХорошего вечера 😊', 'success');
 
     // Clear form
     document.getElementById('atelie').value = '';
     document.getElementById('clients').value = '';
     document.getElementById('cash').value = '';
     document.getElementById('card').value = '';
+    document.getElementById('hcAtelie').value = '';
+    document.getElementById('hcClients').value = '';
+    document.getElementById('hcCash').value = '';
+    document.getElementById('hcCard').value = '';
     removePhoto();
 
   } catch (err) {
@@ -500,7 +538,7 @@ async function submitReport() {
 
 function showStatus(text, type) {
   const el = document.getElementById('status');
-  el.textContent = text;
+  el.innerHTML = text.replace(/\n/g, '<br>');
   el.className = 'status ' + (type || '');
 }
 
