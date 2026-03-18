@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=15">
+<link rel="stylesheet" href="css/app.css?v=16">
 <title>DressCode · Дашборд</title>
 </head>
 <body>
@@ -114,6 +114,7 @@
     <div class="tasks-view-toggle">
       <button class="tasks-view-btn active" id="btnViewCal" onclick="tasksSetView('calendar')">Календарь</button>
       <button class="tasks-view-btn" id="btnViewTree" onclick="tasksSetView('tree')">Доска</button>
+      <button class="tasks-view-btn" id="btnViewBranch" onclick="tasksSetView('branch')">Ателье</button>
     </div>
     <div class="tasks-week-nav">
       <button class="tasks-week-arrow" onclick="tasksChangeWeek(-1)">&larr;</button>
@@ -134,6 +135,11 @@
   <div class="tasks-panel" id="tasksPanelTree">
     <div id="tasksTreeView"></div>
     <button class="tasks-add-root-btn" onclick="tasksOpenAddNode(null)">+ Новый блок</button>
+  </div>
+
+  <!-- BRANCH NOTEPAD VIEW -->
+  <div class="tasks-panel" id="tasksPanelBranch">
+    <div id="tasksBranchView"></div>
   </div>
 </div>
 
@@ -177,12 +183,24 @@
   </div>
 </div>
 
+<!-- BRANCH TASK MODAL -->
+<div class="tasks-modal-bg" id="tasksBranchAddModal" onclick="if(event.target===this)tasksCloseModal('tasksBranchAddModal')">
+  <div class="tasks-modal">
+    <div class="tasks-modal-title" id="tasksBranchAddTitle">Добавить задачу</div>
+    <input type="text" class="tasks-modal-input" id="tasksBranchTaskText" placeholder="Что нужно сделать..." />
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksBranchAddModal')">Отмена</button>
+      <button class="tasks-modal-save" onclick="tasksBranchSaveTask()">Добавить</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=15"></script>
-<script src="js/payments.js?v=15"></script>
-<script src="js/tasks.js?v=15"></script>
-<script src="js/business.js?v=15"></script>
+<script src="js/app.js?v=16"></script>
+<script src="js/payments.js?v=16"></script>
+<script src="js/tasks.js?v=16"></script>
+<script src="js/business.js?v=16"></script>
 <script src="js/daily.js?v=1"></script>
 </body>
 </html>

@@ -222,13 +222,48 @@ function tasksUpdateSlotAPI(row, action, field, value) {
   }).catch(function() {});
 }
 
+// ── BRANCH NOTEPAD CONFIG ──
+var BRANCH_NOTEPAD_ITEMS = [
+  {id:'М16', name:'М16 · Мурино 16', icon:'🏠'},
+  {id:'В8', name:'В8 · Воронцовская 8', icon:'🏠'},
+  {id:'П14', name:'П14 · Петровская 14', icon:'🏠'},
+  {id:'А6', name:'А6 · Арсенальная 6', icon:'🏠'},
+  {id:'Г4', name:'Г4 · Гражданская 4', icon:'🏠'},
+  {id:'В22', name:'В22 · Воронцовская 22', icon:'🏠'},
+  {id:'Ек8', name:'Ек8 · Екатерининская 8', icon:'🏠'},
+  {id:'В20', name:'В20 · Воронцовская 20', icon:'🏠'},
+  {id:'Ек17', name:'Ек17 · Екатерининская 17', icon:'🏠'},
+  {id:'Г11', name:'Г11 · Гражданская 11', icon:'🏠'},
+  {id:'ХЧ', name:'Химчистка', icon:'🧹'},
+  {id:'other', name:'Остальные задачи', icon:'📋'}
+];
+var tasksBranchExpanded = {};
+var tasksBranchAddTarget = null;
+
+function tasksBranchLoad() {
+  try {
+    var d = JSON.parse(localStorage.getItem('branch_notepad_v1') || 'null');
+    if (d) return d;
+  } catch(e) {}
+  var empty = {};
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { empty[b.id] = []; });
+  return empty;
+}
+var tasksBranchDB = tasksBranchLoad();
+
+function tasksBranchSave() {
+  localStorage.setItem('branch_notepad_v1', JSON.stringify(tasksBranchDB));
+}
+
 // ── VIEW SWITCH ──
 function tasksSetView(v) {
   tasksView = v;
   document.getElementById('tasksPanelCal').classList.toggle('active', v === 'calendar');
   document.getElementById('tasksPanelTree').classList.toggle('active', v === 'tree');
+  document.getElementById('tasksPanelBranch').classList.toggle('active', v === 'branch');
   document.getElementById('btnViewCal').classList.toggle('active', v === 'calendar');
   document.getElementById('btnViewTree').classList.toggle('active', v === 'tree');
+  document.getElementById('btnViewBranch').classList.toggle('active', v === 'branch');
   tasksRenderAll();
 }
 
@@ -246,8 +281,10 @@ function tasksRenderAll() {
   if (tasksView === 'calendar') {
     tasksRenderDayTabs();
     tasksRenderDayContent();
-  } else {
+  } else if (tasksView === 'tree') {
     tasksRenderTree();
+  } else if (tasksView === 'branch') {
+    tasksRenderBranch();
   }
 }
 
@@ -562,6 +599,156 @@ function tasksScheduleLeaf(leafId) {
   tasksSetView('calendar');
   tasksRenderAll();
   showToast(node.name + ' \u2192 ' + TASKS_DAY_CFG[tasksSelDay].full);
+}
+
+// ── BRANCH NOTEPAD RENDERING ──
+function tasksRenderBranch() {
+  var el = document.getElementById('tasksBranchView');
+  if (!el) return;
+
+  var totalTasks = 0;
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) {
+    totalTasks += (tasksBranchDB[b.id] || []).length;
+  });
+
+  var html = '<div class="branch-notepad-header">' +
+    '<span class="branch-notepad-title">Блокнот по филиалам</span>' +
+    '<span class="branch-notepad-count">' + totalTasks + ' задач</span>' +
+  '</div>';
+
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) {
+    var tasks = tasksBranchDB[b.id] || [];
+    var expanded = tasksBranchExpanded[b.id] || false;
+    var doneCount = tasks.filter(function(t) { return t.done; }).length;
+
+    html += '<div class="branch-card' + (expanded ? ' expanded' : '') + '">' +
+      '<div class="branch-card-header" onclick="tasksBranchToggle(\'' + b.id + '\')">' +
+        '<span class="branch-card-icon">' + b.icon + '</span>' +
+        '<span class="branch-card-name">' + b.name + '</span>' +
+        '<span class="branch-card-badge">' + tasks.length + '</span>' +
+        (doneCount ? '<span class="branch-card-done-badge">' + doneCount + ' ✓</span>' : '') +
+        '<span class="branch-card-arrow">' + (expanded ? '▼' : '▶') + '</span>' +
+      '</div>';
+
+    if (expanded) {
+      html += '<div class="branch-card-body">';
+      if (tasks.length) {
+        tasks.forEach(function(t, idx) {
+          html += '<div class="branch-task' + (t.done ? ' branch-task-done' : '') + '">' +
+            '<div class="branch-task-check' + (t.done ? ' done' : '') + '" onclick="tasksBranchToggleTask(\'' + b.id + '\',' + idx + ')"></div>' +
+            '<div class="branch-task-text">' + t.text + '</div>' +
+            '<div class="branch-task-actions">' +
+              '<button class="branch-task-to-cal" onclick="tasksBranchToCal(\'' + b.id + '\',' + idx + ')" title="На календарь">📅</button>' +
+              '<button class="branch-task-del" onclick="tasksBranchDeleteTask(\'' + b.id + '\',' + idx + ')">✕</button>' +
+            '</div>' +
+          '</div>';
+        });
+      } else {
+        html += '<div class="branch-empty">Нет задач</div>';
+      }
+      html += '<div class="branch-add-row">' +
+        '<input type="text" class="branch-add-input" id="branchInput_' + b.id + '" placeholder="Добавить задачу..." onkeydown="if(event.key===\'Enter\')tasksBranchQuickAdd(\'' + b.id + '\')" />' +
+        '<button class="branch-add-btn" onclick="tasksBranchQuickAdd(\'' + b.id + '\')">+</button>' +
+      '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function tasksBranchToggle(branchId) {
+  tasksBranchExpanded[branchId] = !tasksBranchExpanded[branchId];
+  tasksRenderBranch();
+}
+
+function tasksBranchQuickAdd(branchId) {
+  var input = document.getElementById('branchInput_' + branchId);
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  if (!tasksBranchDB[branchId]) tasksBranchDB[branchId] = [];
+  tasksBranchDB[branchId].push({text: text, done: false, created: new Date().toISOString()});
+  tasksBranchSave();
+  input.value = '';
+  tasksRenderBranch();
+  // Re-focus input after render
+  setTimeout(function() {
+    var el = document.getElementById('branchInput_' + branchId);
+    if (el) el.focus();
+  }, 50);
+}
+
+function tasksBranchToggleTask(branchId, idx) {
+  var tasks = tasksBranchDB[branchId];
+  if (!tasks || !tasks[idx]) return;
+  tasks[idx].done = !tasks[idx].done;
+  tasksBranchSave();
+  tasksRenderBranch();
+}
+
+function tasksBranchDeleteTask(branchId, idx) {
+  var tasks = tasksBranchDB[branchId];
+  if (!tasks || !tasks[idx]) return;
+  tasks.splice(idx, 1);
+  tasksBranchSave();
+  tasksRenderBranch();
+}
+
+function tasksBranchToCal(branchId, idx) {
+  var tasks = tasksBranchDB[branchId];
+  if (!tasks || !tasks[idx]) return;
+  var task = tasks[idx];
+  var branchName = '';
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { if (b.id === branchId) branchName = b.id; });
+
+  // Add to current selected day in calendar
+  var sched = tasksGetSchedule(tasksSelDay);
+  var lastEnd = sched.length ? sched[sched.length - 1].endTime : '10:00';
+  var parts = (lastEnd || '10:00').split(':').map(Number);
+  var endM = parts[0] * 60 + parts[1] + 60;
+
+  sched.push({
+    name: task.text,
+    category: branchName,
+    startTime: lastEnd || '10:00',
+    endTime: String(Math.floor(endM / 60)).padStart(2, '0') + ':' + String(endM % 60).padStart(2, '0'),
+    duration: 60,
+    done: false,
+    color: '#5B4FE8',
+    fromBranch: branchId
+  });
+  tasksSave();
+  tasksAddSlotToAPI(tasksSelDay, sched[sched.length - 1]);
+
+  // Mark as done in branch notepad
+  task.done = true;
+  tasksBranchSave();
+
+  tasksSetView('calendar');
+  showToast(task.text + ' → ' + TASKS_DAY_CFG[tasksSelDay].full);
+}
+
+function tasksBranchOpenAdd(branchId) {
+  tasksBranchAddTarget = branchId;
+  var branchName = '';
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { if (b.id === branchId) branchName = b.name; });
+  document.getElementById('tasksBranchAddTitle').textContent = 'Добавить в «' + branchName + '»';
+  document.getElementById('tasksBranchTaskText').value = '';
+  document.getElementById('tasksBranchAddModal').style.display = 'flex';
+  setTimeout(function() { document.getElementById('tasksBranchTaskText').focus(); }, 100);
+}
+
+function tasksBranchSaveTask() {
+  var text = document.getElementById('tasksBranchTaskText').value.trim();
+  if (!text || !tasksBranchAddTarget) return;
+  if (!tasksBranchDB[tasksBranchAddTarget]) tasksBranchDB[tasksBranchAddTarget] = [];
+  tasksBranchDB[tasksBranchAddTarget].push({text: text, done: false, created: new Date().toISOString()});
+  tasksBranchSave();
+  tasksCloseModal('tasksBranchAddModal');
+  tasksRenderBranch();
+  showToast('Задача добавлена');
 }
 
 // ── MODAL HELPERS ──
