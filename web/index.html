@@ -25,6 +25,9 @@
   <button class="nav-btn active" onclick="switchTab('business',this)" id="nav-business">
     <span class="nav-icon">&#x1F3E2;</span>Бизнес
   </button>
+  <button class="nav-btn" onclick="switchTab('daily',this)" id="nav-daily">
+    <span class="nav-icon">&#x1F4C5;</span>Дни
+  </button>
   <button class="nav-btn" onclick="switchTab('payments',this)" id="nav-payments">
     <span class="nav-icon">&#x1F4B3;</span>Платежи
   </button>
@@ -82,6 +85,16 @@
   <div id="dailyPulseCard" style="display:none;"></div>
   <div id="plannerCard" style="display:none;"></div>
   <div id="filialsGrid"></div>
+</div>
+
+<!-- TAB: ЕЖЕДНЕВНО -->
+<div class="main-tab" id="tab-daily">
+  <div id="dailyChartLoading" style="text-align:center;padding:40px;color:#999;">Загрузка...</div>
+  <div id="dailyChartContent" style="display:none;">
+    <div id="dailyChartBars"></div>
+    <div id="dailyDetailOverlay" style="display:none;"></div>
+  </div>
+  <div id="dailyChartError" style="display:none;"></div>
 </div>
 
 <!-- TAB: ПЛАТЕЖИ -->
@@ -170,5 +183,6 @@
 <script src="js/payments.js?v=15"></script>
 <script src="js/tasks.js?v=15"></script>
 <script src="js/business.js?v=15"></script>
+<script src="js/daily.js?v=1"></script>
 </body>
 </html>
