@@ -48,11 +48,13 @@ function saveCache(s) {
 // ═══════════════════════════════════════════════════════════════
 // FETCH HELPERS
 // ═══════════════════════════════════════════════════════════════
-function fetchWithTimeout(url, timeout) {
+function fetchWithTimeout(url, timeout, options) {
   timeout = timeout || 15000;
+  options = options || {};
   var controller = new AbortController();
+  options.signal = controller.signal;
   var id = setTimeout(function() { controller.abort(); }, timeout);
-  return fetch(url, { signal: controller.signal }).then(function(r) {
+  return fetch(url, options).then(function(r) {
     clearTimeout(id); return r;
   });
 }
@@ -279,11 +281,18 @@ function fmtShort(num) {
   if (num >= 1000) return Math.round(num / 1000) + '\u041A\u20BD';
   return Math.round(num) + '\u20BD';
 }
-function showToast(msg) {
+function showToast(msg, callback, btnLabel) {
   var toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  if (callback && btnLabel) {
+    toast.innerHTML = '<span>' + msg + '</span> <button class="toast-action-btn" onclick="this.parentElement._cb()">' + btnLabel + '</button>';
+    toast._cb = function() { callback(); toast.classList.remove('show'); };
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 5000);
+  } else {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  }
 }
 function formatDate(dateStr) {
   if (!dateStr) return '\u2014';

@@ -449,9 +449,15 @@ body {
   background: rgba(17,24,39,0.92); backdrop-filter: blur(12px); color: white;
   padding: 11px 22px; border-radius: 50px; font-size: 13px; font-weight: 600;
   z-index: 300; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
-  pointer-events: none; border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; gap: 10px;
 }
-.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.show { transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.toast-action-btn {
+  background: var(--green); color: white; border: none; border-radius: 20px;
+  padding: 4px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+  font-family: inherit; white-space: nowrap;
+}
 
 /* ===== OVERLAY ===== */
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -1358,6 +1364,48 @@ body {
   transition: opacity 0.12s; font-family: inherit;
 }
 .branch-add-btn:active { opacity: 0.8; }
+
+/* -- Subtask styles -- */
+.branch-subtask-list {
+  margin-left: 28px; border-left: 2px solid var(--border-strong);
+  padding-left: 10px; margin-bottom: 4px;
+}
+.branch-subtask {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 0; font-size: 12px;
+}
+.branch-subtask-done .branch-task-text {
+  text-decoration: line-through; color: var(--text-3);
+}
+.branch-task-check.small {
+  width: 18px; height: 18px; min-width: 18px;
+  border-width: 1.5px;
+}
+.branch-task-check.small.done::after { font-size: 10px; }
+.branch-task-progress {
+  font-size: 10px; color: var(--green); font-weight: 600; margin-left: 4px;
+}
+.branch-task-expand {
+  background: none; border: none; font-size: 10px; color: var(--text-3);
+  cursor: pointer; padding: 4px; border-radius: 4px;
+}
+.branch-task-expand:active { background: var(--surface-2); }
+.branch-task-expand.subtle { opacity: 0.3; font-size: 8px; }
+.branch-task-expand.subtle:hover { opacity: 0.7; }
+.branch-subtask-del {
+  background: none; border: none; font-size: 11px; color: var(--text-3);
+  cursor: pointer; padding: 2px 4px; border-radius: 4px; margin-left: auto;
+  opacity: 0.5;
+}
+.branch-subtask-del:active { opacity: 1; color: var(--red); }
+.branch-subtask-add-row { padding: 4px 0; }
+.branch-subtask-input {
+  width: 100%; padding: 5px 8px; border: 1px dashed var(--border-strong);
+  border-radius: var(--r-xs); font-size: 11px; font-family: inherit;
+  background: transparent; outline: none; color: var(--text-2);
+}
+.branch-subtask-input:focus { border-style: solid; border-color: var(--primary); background: white; }
+.branch-subtask-input::placeholder { color: var(--text-3); font-style: italic; }
 
 /* ===== TASK MODALS ===== */
 .tasks-modal-bg {

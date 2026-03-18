@@ -46,6 +46,9 @@ function doGet(e) {
         case 'getDDS':        result = handleGetDDS(e); break;
         case 'getTasks':      result = handleGetTasks(e); break;
 
+        // ─── БЛОКНОТ ФИЛИАЛОВ ───
+        case 'getBranchNotes': result = handleGetBranchNotes(e); break;
+
         default:
           result = { success: false, error: 'Unknown action: ' + action };
       }
@@ -108,6 +111,13 @@ function doPost(e) {
         case 'addTask':          result = handleAddTask(data); break;
         case 'updateSetting':    result = handleUpdateSetting(data); break;
         case 'writeBranchDaily': result = writeBranchDaily(data); break;
+        case 'uploadReportPhoto': result = handleUploadReportPhoto(data); break;
+
+        // ─── БЛОКНОТ ФИЛИАЛОВ ───
+        case 'addBranchNote':    result = handleAddBranchNote(data); break;
+        case 'updateBranchNote': result = handleUpdateBranchNote(data); break;
+        case 'deleteBranchNote': result = handleDeleteBranchNote(data); break;
+
         default:
           result = { success: false, error: 'Unknown POST action: ' + action };
       }
@@ -1552,10 +1562,10 @@ function migrateAddOwnerColumn() {
 
 
 // ============================================================
-// writeBranchDaily — запись данных от Telegram-бота филиала
-// Версия 11 задеплоена 24 февр. 2026
+// writeBranchDaily — запись данных от Telegram-бота и веб-формы филиала
+// Версия 12 — добавлена запись Нал/Безнал (cash/card)
 // POST ?action=writeBranchDaily
-// Body: { branch: "М16", date: "2026-02-23", atelie: 32500, clients: 18 }
+// Body: { branch: "М16", date: "2026-02-23", atelie: 32500, clients: 18, cash: 5000, card: 27500 }
 // ============================================================
 function writeBranchDaily(data) {
   var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
@@ -1594,8 +1604,10 @@ function writeBranchDaily(data) {
     return { success: false, error: 'Столбец Дата не найден в листе ' + data.branch };
   }
 
-  var atCol = dateCol + 1;  // Ателье/оборот
-  var klCol = dateCol + 2;  // Клиенты
+  var atCol   = dateCol + 1;  // АТ — сумма заказов
+  var klCol   = dateCol + 2;  // Кл — клиенты
+  var cashCol = dateCol + 3;  // Нал — наличные
+  var cardCol = dateCol + 4;  // Безнал — безналичные
 
   var inMonth = false;
   var targetRow = -1;
@@ -1638,9 +1650,12 @@ function writeBranchDaily(data) {
 
   sheet.getRange(targetRow, atCol + 1).setValue(data.atelie);
   sheet.getRange(targetRow, klCol + 1).setValue(data.clients);
+  sheet.getRange(targetRow, cashCol + 1).setValue(data.cash || 0);
+  sheet.getRange(targetRow, cardCol + 1).setValue(data.card || 0);
 
   Logger.log('writeBranchDaily: ' + data.branch + ' ' + data.date +
-             ' atelie=' + data.atelie + ' clients=' + data.clients + ' row=' + targetRow);
+             ' atelie=' + data.atelie + ' clients=' + data.clients +
+             ' cash=' + (data.cash || 0) + ' card=' + (data.card || 0) + ' row=' + targetRow);
 
   return {
     success: true,
@@ -1648,8 +1663,64 @@ function writeBranchDaily(data) {
     date: data.date,
     atelie: data.atelie,
     clients: data.clients,
+    cash: data.cash || 0,
+    card: data.card || 0,
     row: targetRow
   };
+}
+
+// ============================================================
+// uploadReportPhoto — сохранение фото отчёта в Google Drive
+// POST ?action=uploadReportPhoto
+// Body: { branch: "Г11", date: "2026-03-14", photo: "data:image/jpeg;base64,..." }
+// ============================================================
+function handleUploadReportPhoto(data) {
+  if (!data.branch || !data.date || !data.photo) {
+    return { success: false, error: 'Нужны branch, date и photo' };
+  }
+
+  var base64Data = data.photo.replace(/^data:image\/\w+;base64,/, '');
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg',
+    data.branch + '_' + data.date + '.jpg');
+
+  // Папка "Ежедневные отчёты" в корне Drive (создаётся автоматически)
+  var folderName = 'Ежедневные отчёты';
+  var folders = DriveApp.getFoldersByName(folderName);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+  // Подпапка по филиалу
+  var subFolders = folder.getFoldersByName(data.branch);
+  var subFolder = subFolders.hasNext() ? subFolders.next() : folder.createFolder(data.branch);
+
+  var file = subFolder.createFile(blob);
+
+  return {
+    success: true,
+    fileId: file.getId(),
+    fileName: file.getName()
+  };
+}
+
+// ─── Инициализация папки отчётов (запустить 1 раз вручную) ─────────────────
+function setupReportFolders() {
+  var folderName = 'Ежедневные отчёты';
+  var folders = DriveApp.getFoldersByName(folderName);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+  // Создаём подпапки для каждого филиала
+  var branches = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
+  for (var i = 0; i < branches.length; i++) {
+    var subs = folder.getFoldersByName(branches[i]);
+    if (!subs.hasNext()) {
+      folder.createFolder(branches[i]);
+    }
+  }
+
+  // Добавляем в избранное (звёздочка)
+  var fileId = folder.getId();
+  Drive.Files.update({ starred: true }, fileId);
+
+  Logger.log('Папка "' + folderName + '" создана, подпапки готовы, звёздочка поставлена. ID: ' + fileId);
 }
 
 // ─── К3: ЗАГЛУШКИ (пока не реализованы) ───────────────────────────────────
@@ -1793,4 +1864,130 @@ function handleAddTask(data) {
   sheet.appendRow([today, data.task, false, '', now]);
 
   return { success: true, added: 1, task: data.task };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// БЛОКНОТ ФИЛИАЛОВ (лист "БЛОКНОТ" в АТЕЛЬЕ 2026)
+// Столбцы: id | branch | text | done | created | parent_id | sort_order
+// ═══════════════════════════════════════════════════════════════
+
+function _getBloknot() {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('БЛОКНОТ');
+  if (!sheet) {
+    sheet = ss.insertSheet('БЛОКНОТ');
+    sheet.appendRow(['id', 'branch', 'text', 'done', 'created', 'parent_id', 'sort_order']);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function _genId() {
+  return new Date().getTime().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function handleGetBranchNotes(e) {
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+  if (raw.length <= 1) return { success: true, data: [] };
+
+  var branch = (e && e.parameter && e.parameter.branch) || '';
+  var notes = [];
+
+  for (var i = 1; i < raw.length; i++) {
+    var row = raw[i];
+    if (!row[0]) continue;
+    if (branch && row[1] !== branch) continue;
+    notes.push({
+      id: row[0],
+      branch: row[1],
+      text: row[2],
+      done: row[3] === true || row[3] === 'TRUE' || row[3] === 1,
+      created: row[4] || '',
+      parent_id: row[5] || '',
+      sort_order: row[6] || 0
+    });
+  }
+
+  return { success: true, data: notes };
+}
+
+function handleAddBranchNote(data) {
+  var VALID_BRANCHES = ['М16','В8','П14','А6','Г4','В22','Ек8','В20','Ек17','Г11','ХЧ','other'];
+  if (!data.branch || !data.text) {
+    return { success: false, error: 'branch and text required' };
+  }
+  if (VALID_BRANCHES.indexOf(data.branch) === -1) {
+    return { success: false, error: 'Invalid branch: ' + data.branch };
+  }
+
+  var sheet = _getBloknot();
+  var id = _genId();
+  var now = new Date().toISOString();
+  var parentId = data.parent_id || '';
+
+  // Determine sort_order: max+1 for this branch (and parent_id)
+  var raw = sheet.getDataRange().getValues();
+  var maxSort = -1;
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][1] === data.branch && (raw[i][5] || '') === parentId) {
+      var s = parseInt(raw[i][6]) || 0;
+      if (s > maxSort) maxSort = s;
+    }
+  }
+
+  sheet.appendRow([id, data.branch, data.text, 'FALSE', now, parentId, maxSort + 1]);
+
+  return { success: true, id: id, branch: data.branch, text: data.text };
+}
+
+function handleUpdateBranchNote(data) {
+  if (!data.id) return { success: false, error: 'id required' };
+
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < raw.length; i++) {
+    if (String(raw[i][0]) === String(data.id)) {
+      if (data.done !== undefined) {
+        sheet.getRange(i + 1, 4).setValue((data.done === true || data.done === 'true') ? 'TRUE' : 'FALSE');
+      }
+      if (data.text !== undefined) {
+        sheet.getRange(i + 1, 3).setValue(data.text);
+      }
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Note not found: ' + data.id };
+}
+
+function handleDeleteBranchNote(data) {
+  if (!data.id) return { success: false, error: 'id required' };
+
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+
+  // Delete note and its children (subtasks)
+  var idsToDelete = [String(data.id)];
+  // Find children
+  for (var i = 1; i < raw.length; i++) {
+    if (String(raw[i][5]) === String(data.id)) {
+      idsToDelete.push(String(raw[i][0]));
+    }
+  }
+
+  // Delete from bottom to top to preserve row indices
+  var rowsToDelete = [];
+  for (var i = 1; i < raw.length; i++) {
+    if (idsToDelete.indexOf(String(raw[i][0])) !== -1) {
+      rowsToDelete.push(i + 1);
+    }
+  }
+  rowsToDelete.sort(function(a, b) { return b - a; });
+  for (var j = 0; j < rowsToDelete.length; j++) {
+    sheet.deleteRow(rowsToDelete[j]);
+  }
+
+  return { success: true, deleted: rowsToDelete.length };
 }

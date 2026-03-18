@@ -208,9 +208,8 @@ function tasksAddSlotToAPI(dayIdx, slot) {
 function tasksUpdateSlotAPI(row, action, field, value) {
   if (!row) return;
   var body = JSON.stringify({
-    action: 'updateScheduleSlot',
-    row: row,
     action: action,
+    row: row,
     field: field || '',
     value: value || ''
   });
@@ -220,6 +219,12 @@ function tasksUpdateSlotAPI(row, action, field, value) {
     body: body,
     mode: 'no-cors'
   }).catch(function() {});
+}
+
+// ── BRANCH NOTEPAD HELPERS ──
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── BRANCH NOTEPAD CONFIG ──
@@ -239,11 +244,18 @@ var BRANCH_NOTEPAD_ITEMS = [
 ];
 var tasksBranchExpanded = {};
 var tasksBranchAddTarget = null;
+var tasksBranchSyncStatus = 'idle'; // idle | loading | synced | offline
 
+// ── STORAGE: localStorage cache + API sync ──
 function tasksBranchLoad() {
   try {
-    var d = JSON.parse(localStorage.getItem('branch_notepad_v1') || 'null');
+    var d = JSON.parse(localStorage.getItem('branch_notepad_v2') || 'null');
     if (d) return d;
+  } catch(e) {}
+  // Fallback: try old v1 format
+  try {
+    var old = JSON.parse(localStorage.getItem('branch_notepad_v1') || 'null');
+    if (old) return old;
   } catch(e) {}
   var empty = {};
   BRANCH_NOTEPAD_ITEMS.forEach(function(b) { empty[b.id] = []; });
@@ -252,7 +264,147 @@ function tasksBranchLoad() {
 var tasksBranchDB = tasksBranchLoad();
 
 function tasksBranchSave() {
-  localStorage.setItem('branch_notepad_v1', JSON.stringify(tasksBranchDB));
+  localStorage.setItem('branch_notepad_v2', JSON.stringify(tasksBranchDB));
+}
+
+// Build tree from flat server data
+function tasksBranchBuildTree(flatNotes) {
+  var db = {};
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { db[b.id] = []; });
+
+  // Separate parents and children
+  var byId = {};
+  var parents = [];
+  var children = [];
+
+  flatNotes.forEach(function(n) {
+    byId[n.id] = {id: n.id, text: n.text, done: n.done, created: n.created, parent_id: n.parent_id || '', children: [], sort_order: n.sort_order || 0};
+    if (n.parent_id) {
+      children.push(n);
+    } else {
+      parents.push(n);
+    }
+  });
+
+  // Attach children to parents
+  children.forEach(function(c) {
+    if (byId[c.parent_id]) {
+      byId[c.parent_id].children.push(byId[c.id]);
+    }
+  });
+
+  // Sort children by sort_order
+  Object.keys(byId).forEach(function(id) {
+    byId[id].children.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+  });
+
+  // Group parents by branch
+  parents.forEach(function(p) {
+    if (db[p.branch]) {
+      db[p.branch].push(byId[p.id]);
+    }
+  });
+
+  // Sort each branch by sort_order
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) {
+    db[b.id].sort(function(a, b2) { return (a.sort_order || 0) - (b2.sort_order || 0); });
+  });
+
+  return db;
+}
+
+// Fetch all notes from server
+function tasksBranchLoadFromAPI() {
+  tasksBranchSyncStatus = 'loading';
+  tasksBranchRenderSyncBadge();
+
+  fetchWithTimeout(API_ATELIE + '?action=getBranchNotes', 15000)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.success && data.data) {
+        tasksBranchDB = tasksBranchBuildTree(data.data);
+        tasksBranchSave();
+        tasksBranchSyncStatus = 'synced';
+
+        // Mark migration done if old v1 data existed
+        if (localStorage.getItem('branch_notepad_v1') && !localStorage.getItem('branch_notepad_migrated')) {
+          tasksBranchMigrate();
+        } else {
+          tasksBranchRenderSyncBadge();
+          if (tasksView === 'branch') tasksRenderBranch();
+        }
+      }
+    })
+    .catch(function() {
+      tasksBranchSyncStatus = 'offline';
+      tasksBranchRenderSyncBadge();
+    });
+}
+
+// Migrate old localStorage data to server
+function tasksBranchMigrate() {
+  try {
+    var old = JSON.parse(localStorage.getItem('branch_notepad_v1') || '{}');
+    var tasks = [];
+    Object.keys(old).forEach(function(branch) {
+      (old[branch] || []).forEach(function(t) {
+        if (t.text) tasks.push({branch: branch, text: t.text, done: t.done || false});
+      });
+    });
+    if (tasks.length === 0) {
+      localStorage.setItem('branch_notepad_migrated', 'true');
+      return;
+    }
+    // Upload tasks one by one (simple approach)
+    var uploaded = 0;
+    tasks.forEach(function(t) {
+      fetch(API_ATELIE + '?action=addBranchNote', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({branch: t.branch, text: t.text}),
+        mode: 'no-cors'
+      }).then(function() {
+        uploaded++;
+        if (uploaded === tasks.length) {
+          localStorage.setItem('branch_notepad_migrated', 'true');
+          showToast(tasks.length + ' задач перенесено в облако');
+          // Reload from server to get IDs
+          setTimeout(function() { tasksBranchLoadFromAPI(); }, 2000);
+        }
+      }).catch(function() {});
+    });
+  } catch(e) {
+    localStorage.setItem('branch_notepad_migrated', 'true');
+  }
+}
+
+// API helper for mutations
+function tasksBranchAPI(action, data, onSuccess, onError) {
+  fetchWithTimeout(API_ATELIE + '?action=' + action, 15000, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res && res.success) {
+      if (onSuccess) onSuccess(res);
+    } else {
+      if (onError) onError(res);
+    }
+  })
+  .catch(function(err) {
+    if (onError) onError(err);
+  });
+}
+
+function tasksBranchRenderSyncBadge() {
+  var el = document.getElementById('branchSyncBadge');
+  if (!el) return;
+  if (tasksBranchSyncStatus === 'loading') el.textContent = '⟳';
+  else if (tasksBranchSyncStatus === 'synced') el.textContent = '☁️';
+  else if (tasksBranchSyncStatus === 'offline') el.textContent = '⚠️';
+  else el.textContent = '';
 }
 
 // ── VIEW SWITCH ──
@@ -602,6 +754,8 @@ function tasksScheduleLeaf(leafId) {
 }
 
 // ── BRANCH NOTEPAD RENDERING ──
+var tasksBranchSubExpanded = {}; // track which tasks have subtasks expanded
+
 function tasksRenderBranch() {
   var el = document.getElementById('tasksBranchView');
   if (!el) return;
@@ -612,7 +766,9 @@ function tasksRenderBranch() {
   });
 
   var html = '<div class="branch-notepad-header">' +
-    '<span class="branch-notepad-title">Блокнот по филиалам</span>' +
+    '<span class="branch-notepad-title">Блокнот по филиалам <span id="branchSyncBadge" class="branch-sync-badge">' +
+      (tasksBranchSyncStatus === 'synced' ? '☁️' : tasksBranchSyncStatus === 'loading' ? '⟳' : tasksBranchSyncStatus === 'offline' ? '⚠️' : '') +
+    '</span></span>' +
     '<span class="branch-notepad-count">' + totalTasks + ' задач</span>' +
   '</div>';
 
@@ -633,15 +789,40 @@ function tasksRenderBranch() {
     if (expanded) {
       html += '<div class="branch-card-body">';
       if (tasks.length) {
-        tasks.forEach(function(t, idx) {
+        tasks.forEach(function(t) {
+          var hasChildren = t.children && t.children.length > 0;
+          var childDone = hasChildren ? t.children.filter(function(c) { return c.done; }).length : 0;
+          var subExpanded = tasksBranchSubExpanded[t.id] || false;
+
           html += '<div class="branch-task' + (t.done ? ' branch-task-done' : '') + '">' +
-            '<div class="branch-task-check' + (t.done ? ' done' : '') + '" onclick="tasksBranchToggleTask(\'' + b.id + '\',' + idx + ')"></div>' +
-            '<div class="branch-task-text">' + t.text + '</div>' +
+            '<div class="branch-task-check' + (t.done ? ' done' : '') + '" onclick="tasksBranchToggleTask(\'' + b.id + '\',\'' + t.id + '\',false,\'\')"></div>' +
+            '<div class="branch-task-text">' + escHtml(t.text) +
+              (hasChildren ? '<span class="branch-task-progress">(' + childDone + '/' + t.children.length + ')</span>' : '') +
+            '</div>' +
             '<div class="branch-task-actions">' +
-              '<button class="branch-task-to-cal" onclick="tasksBranchToCal(\'' + b.id + '\',' + idx + ')" title="На календарь">📅</button>' +
-              '<button class="branch-task-del" onclick="tasksBranchDeleteTask(\'' + b.id + '\',' + idx + ')">✕</button>' +
+              '<button class="branch-task-expand' + (hasChildren || subExpanded ? '' : ' subtle') + '" onclick="tasksBranchToggleSub(\'' + t.id + '\')" title="Подзадачи">' + (subExpanded ? '▼' : '▶') + '</button>' +
+              '<button class="branch-task-to-cal" onclick="tasksBranchToCal(\'' + b.id + '\',\'' + t.id + '\')" title="На календарь">📅</button>' +
+              '<button class="branch-task-del" onclick="tasksBranchDeleteTask(\'' + b.id + '\',\'' + t.id + '\')">✕</button>' +
             '</div>' +
           '</div>';
+
+          // Subtask list
+          if (subExpanded) {
+            html += '<div class="branch-subtask-list">';
+            if (hasChildren) {
+              t.children.forEach(function(c) {
+                html += '<div class="branch-subtask' + (c.done ? ' branch-subtask-done' : '') + '">' +
+                  '<div class="branch-task-check small' + (c.done ? ' done' : '') + '" onclick="tasksBranchToggleTask(\'' + b.id + '\',\'' + c.id + '\',true,\'' + t.id + '\')"></div>' +
+                  '<div class="branch-task-text">' + escHtml(c.text) + '</div>' +
+                  '<button class="branch-subtask-del" onclick="tasksBranchDeleteSubtask(\'' + b.id + '\',\'' + t.id + '\',\'' + c.id + '\')">✕</button>' +
+                '</div>';
+              });
+            }
+            html += '<div class="branch-subtask-add-row">' +
+              '<input type="text" class="branch-subtask-input" id="branchSubInput_' + t.id + '" placeholder="+ Добавить шаг..." onkeydown="if(event.key===\'Enter\')tasksBranchQuickAdd(\'' + b.id + '\',\'' + t.id + '\')" />' +
+            '</div>';
+            html += '</div>';
+          }
         });
       } else {
         html += '<div class="branch-empty">Нет задач</div>';
@@ -658,50 +839,151 @@ function tasksRenderBranch() {
   el.innerHTML = html;
 }
 
+function tasksBranchToggleSub(taskId) {
+  tasksBranchSubExpanded[taskId] = !tasksBranchSubExpanded[taskId];
+  tasksRenderBranch();
+}
+
+function tasksBranchDeleteSubtask(branchId, parentId, childId) {
+  var parent = tasksBranchFindById(branchId, parentId);
+  if (!parent || !parent.children) return;
+  parent.children = parent.children.filter(function(c) { return c.id !== childId; });
+  tasksBranchSave();
+  tasksRenderBranch();
+  tasksBranchAPI('deleteBranchNote', {id: childId}, null,
+    function() { showToast('Ошибка удаления'); }
+  );
+}
+
 function tasksBranchToggle(branchId) {
   tasksBranchExpanded[branchId] = !tasksBranchExpanded[branchId];
   tasksRenderBranch();
 }
 
-function tasksBranchQuickAdd(branchId) {
-  var input = document.getElementById('branchInput_' + branchId);
+function tasksBranchQuickAdd(branchId, parentId) {
+  var inputId = parentId ? 'branchSubInput_' + parentId : 'branchInput_' + branchId;
+  var input = document.getElementById(inputId);
   if (!input) return;
   var text = input.value.trim();
   if (!text) return;
-  if (!tasksBranchDB[branchId]) tasksBranchDB[branchId] = [];
-  tasksBranchDB[branchId].push({text: text, done: false, created: new Date().toISOString()});
+
+  // Optimistic local update
+  var tempId = 'tmp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  var newTask = {id: tempId, text: text, done: false, created: new Date().toISOString(), parent_id: parentId || '', children: [], sort_order: 999};
+
+  if (parentId) {
+    // Add as subtask
+    var parent = tasksBranchFindById(branchId, parentId);
+    if (parent) {
+      newTask.sort_order = parent.children.length;
+      parent.children.push(newTask);
+    }
+  } else {
+    if (!tasksBranchDB[branchId]) tasksBranchDB[branchId] = [];
+    newTask.sort_order = tasksBranchDB[branchId].length;
+    tasksBranchDB[branchId].push(newTask);
+  }
   tasksBranchSave();
   input.value = '';
   tasksRenderBranch();
-  // Re-focus input after render
   setTimeout(function() {
-    var el = document.getElementById('branchInput_' + branchId);
+    var el = document.getElementById(inputId);
     if (el) el.focus();
   }, 50);
+
+  // Sync to server
+  tasksBranchAPI('addBranchNote', {branch: branchId, text: text, parent_id: parentId || ''},
+    function(res) {
+      // Replace temp ID with server ID
+      var task = tasksBranchFindById(branchId, tempId);
+      if (task && res.id) task.id = res.id;
+      tasksBranchSave();
+    },
+    function() { showToast('Ошибка сохранения'); }
+  );
 }
 
-function tasksBranchToggleTask(branchId, idx) {
-  var tasks = tasksBranchDB[branchId];
-  if (!tasks || !tasks[idx]) return;
-  tasks[idx].done = !tasks[idx].done;
+// Find task by id in branch (including in children)
+function tasksBranchFindById(branchId, taskId) {
+  var tasks = tasksBranchDB[branchId] || [];
+  for (var i = 0; i < tasks.length; i++) {
+    if (tasks[i].id === taskId) return tasks[i];
+    for (var j = 0; j < (tasks[i].children || []).length; j++) {
+      if (tasks[i].children[j].id === taskId) return tasks[i].children[j];
+    }
+  }
+  return null;
+}
+
+function tasksBranchToggleTask(branchId, taskId, isSubtask, parentId) {
+  var task;
+  if (isSubtask && parentId) {
+    var parent = tasksBranchFindById(branchId, parentId);
+    if (parent) task = parent.children.filter(function(c) { return c.id === taskId; })[0];
+  } else {
+    task = tasksBranchFindById(branchId, taskId);
+  }
+  if (!task) return;
+
+  task.done = !task.done;
   tasksBranchSave();
   tasksRenderBranch();
+
+  // Sync to server
+  tasksBranchAPI('updateBranchNote', {id: taskId, done: task.done}, null,
+    function() { showToast('Ошибка синхронизации'); }
+  );
+
+  // If toggling subtask: check if all siblings done → offer to complete parent
+  if (isSubtask && parentId && task.done) {
+    var par = tasksBranchFindById(branchId, parentId);
+    if (par && par.children.length > 0) {
+      var allDone = par.children.every(function(c) { return c.done; });
+      if (allDone && !par.done) {
+        showToast('Все шаги выполнены!', function() {
+          par.done = true;
+          tasksBranchSave();
+          tasksRenderBranch();
+          tasksBranchAPI('updateBranchNote', {id: parentId, done: true});
+        }, 'Отметить задачу ✓');
+      }
+    }
+  }
+
+  // If toggling parent done: mark all children done
+  if (!isSubtask && task.done && task.children && task.children.length > 0) {
+    task.children.forEach(function(c) {
+      if (!c.done) {
+        c.done = true;
+        tasksBranchAPI('updateBranchNote', {id: c.id, done: true});
+      }
+    });
+    tasksBranchSave();
+    tasksRenderBranch();
+  }
 }
 
-function tasksBranchDeleteTask(branchId, idx) {
+function tasksBranchDeleteTask(branchId, taskId) {
   var tasks = tasksBranchDB[branchId];
-  if (!tasks || !tasks[idx]) return;
+  if (!tasks) return;
+  var idx = -1;
+  for (var i = 0; i < tasks.length; i++) { if (tasks[i].id === taskId) { idx = i; break; } }
+  if (idx === -1) return;
   tasks.splice(idx, 1);
   tasksBranchSave();
   tasksRenderBranch();
+
+  // Sync to server (also deletes children)
+  tasksBranchAPI('deleteBranchNote', {id: taskId}, null,
+    function() { showToast('Ошибка удаления'); }
+  );
 }
 
-function tasksBranchToCal(branchId, idx) {
-  var tasks = tasksBranchDB[branchId];
-  if (!tasks || !tasks[idx]) return;
-  var task = tasks[idx];
+function tasksBranchToCal(branchId, taskId) {
+  var task = tasksBranchFindById(branchId, taskId);
+  if (!task) return;
   var branchName = '';
-  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { if (b.id === branchId) branchName = b.id; });
+  BRANCH_NOTEPAD_ITEMS.forEach(function(b) { if (b.id === branchId) branchName = b.name; });
 
   // Add to current selected day in calendar
   var sched = tasksGetSchedule(tasksSelDay);
@@ -725,6 +1007,7 @@ function tasksBranchToCal(branchId, idx) {
   // Mark as done in branch notepad
   task.done = true;
   tasksBranchSave();
+  tasksBranchAPI('updateBranchNote', {id: taskId, done: true});
 
   tasksSetView('calendar');
   showToast(task.text + ' → ' + TASKS_DAY_CFG[tasksSelDay].full);
@@ -744,11 +1027,23 @@ function tasksBranchSaveTask() {
   var text = document.getElementById('tasksBranchTaskText').value.trim();
   if (!text || !tasksBranchAddTarget) return;
   if (!tasksBranchDB[tasksBranchAddTarget]) tasksBranchDB[tasksBranchAddTarget] = [];
-  tasksBranchDB[tasksBranchAddTarget].push({text: text, done: false, created: new Date().toISOString()});
+  var tempId = 'tmp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  var newTask = {id: tempId, text: text, done: false, created: new Date().toISOString(), parent_id: '', children: [], sort_order: tasksBranchDB[tasksBranchAddTarget].length};
+  tasksBranchDB[tasksBranchAddTarget].push(newTask);
   tasksBranchSave();
   tasksCloseModal('tasksBranchAddModal');
   tasksRenderBranch();
   showToast('Задача добавлена');
+
+  // Sync to server
+  tasksBranchAPI('addBranchNote', {branch: tasksBranchAddTarget, text: text},
+    function(res) {
+      var task = tasksBranchFindById(tasksBranchAddTarget, tempId);
+      if (task && res.id) task.id = res.id;
+      tasksBranchSave();
+    },
+    function() { showToast('Ошибка сохранения'); }
+  );
 }
 
 // ── MODAL HELPERS ──
@@ -760,4 +1055,5 @@ function tasksCloseModal(id) {
 (function tasksInit() {
   tasksRenderAll();
   tasksLoadFromAPI();
+  tasksBranchLoadFromAPI();
 })();
