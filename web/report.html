@@ -484,19 +484,15 @@ async function submitReport() {
 
     // 2. Upload photo if present (тихая отправка — ошибки не показываем)
     if (photoBase64) {
-      try {
-        fetch(APPS_SCRIPT_URL + '?action=uploadReportPhoto', {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            branch: branch.sheet,
-            date: dateVal,
-            photo: photoBase64
-          })
-        });
-      } catch (e) {
-        // тихо игнорируем ошибку фото
-      }
+      fetch(APPS_SCRIPT_URL + '?action=uploadReportPhoto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          branch: branch.sheet,
+          date: dateVal,
+          photo: photoBase64
+        })
+      }).catch(function() {});
     }
 
     // 3. Save to local history
