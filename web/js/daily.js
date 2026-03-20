@@ -126,6 +126,7 @@ function renderDailyChart(data) {
     html += '</div>';
 
     var maxFcAtelie = Math.max(maxAtelie, Math.max.apply(null, forecastDays.map(function(d) { return d.atelie; })) * 1.1);
+    var avgFcAtelie = forecastDays.reduce(function(s, d) { return s + d.atelie; }, 0) / forecastDays.length;
 
     for (var fi = 0; fi < forecastDays.length; fi++) {
       var fd = forecastDays[fi];
@@ -149,13 +150,15 @@ function renderDailyChart(data) {
       html += '<div style="background:' + bgFc + ';border-radius:10px;padding:10px 12px;margin-bottom:4px;border:1px dashed #C4B5FD;">';
 
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      var isHighDay = fd.atelie >= avgFcAtelie;
+      var dayColor = isHighDay ? '#22C55E' : '#A29BFE';
       html += '<div style="font-size:13px;font-weight:500;color:#7B61FF;">';
-      html += fd.dateShort + ' <span style="color:#A29BFE;font-weight:400;">' + dayNameFc + '</span>';
-      if (isWeekendFc) html += ' <span style="font-size:9px;color:#A29BFE;">\u{1F4A4}</span>';
+      html += fd.dateShort + ' <span style="color:' + dayColor + ';font-weight:' + (isHighDay ? '700' : '400') + ';">' + dayNameFc + '</span>';
+      if (isWeekendFc && !isHighDay) html += ' <span style="font-size:9px;color:#A29BFE;">\u{1F4A4}</span>';
       if (fd.weatherIcon) html += ' <span style="font-size:11px;">' + fd.weatherIcon + fd.temp + '\u00B0</span>';
       html += '</div>';
       html += '<div style="text-align:right;">';
-      html += '<span style="font-size:14px;font-weight:700;color:#7B61FF;">' + fmtShort(fd.atelie) + '</span>';
+      html += '<span style="font-size:14px;font-weight:700;color:' + (isHighDay ? '#22C55E' : '#7B61FF') + ';">' + fmtShort(fd.atelie) + '</span>';
       html += '<span style="font-size:11px;color:#A29BFE;margin-left:8px;">' + fd.clients + ' кл</span>';
       html += '</div>';
       html += '</div>';

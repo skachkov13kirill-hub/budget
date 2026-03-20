@@ -23,19 +23,33 @@ function renderBizOverview(data) {
   document.getElementById('ov-clients').textContent = t.fact.clients.toLocaleString('ru-RU');
   document.getElementById('ov-profit').textContent = fmt(t.fact.profit);
 
-  // Всего = ателье + химчистка (из данных)
+  // «На счетах» — калькулятор целевого баланса (900К к концу месяца)
+  var ACCOUNT_TARGET = 900000;
+  var TAILOR_SHARE = 0.5;    // 50% выручки уходит портным
+  var PERSONAL_DAILY = 10000; // 10К/день личные расходы
   var totalWithHimch = (t.fact.atelie || 0) + (t.fact.himchistka || 0);
-  document.getElementById('ov-total').textContent = fmt(t.fact.total || totalWithHimch);
+
+  if (isCurrentMonth && data.filials) {
+    var daysLeft = daysInMonth - now.getDate();
+    var netFc = calcNetworkForecast(data.filials);
+    var remainingRevenue = Math.max(0, netFc - (t.fact.total || totalWithHimch));
+    var futureNet = remainingRevenue * TAILOR_SHARE - daysLeft * PERSONAL_DAILY;
+    var targetNow = Math.round(ACCOUNT_TARGET - futureNet);
+    document.getElementById('ov-total').textContent = fmtShort(targetNow);
+    var targetStatus = targetNow <= 0 ? '\u2705' : targetNow < 500000 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    document.getElementById('ov-total-plan').textContent = targetStatus + ' цель ' + fmtShort(ACCOUNT_TARGET);
+  } else {
+    document.getElementById('ov-total').textContent = fmt(t.fact.total || totalWithHimch);
+    document.getElementById('ov-total-plan').textContent = t.plan.total > 0
+      ? '\u041F\u043B\u0430\u043D: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)' : '';
+  }
 
   if (t.plan.total > 0) {
     // План на текущий день (пропорционально)
     var planAtelieToday = Math.round((t.plan.atelie || 0) * dayRatio);
-    var planTotalToday = Math.round(t.plan.total * dayRatio);
     var pctAtelieToday = planAtelieToday > 0 ? Math.round(t.fact.atelie / planAtelieToday * 100) : 0;
-    var pctTotalToday = planTotalToday > 0 ? Math.round((t.fact.total || totalWithHimch) / planTotalToday * 100) : 0;
 
     var atelieStatus = pctAtelieToday >= 100 ? '\u2705' : pctAtelieToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-    var totalStatus = pctTotalToday >= 100 ? '\u2705' : pctTotalToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
 
     document.getElementById('ov-atelie-plan').textContent = isCurrentMonth
       ? atelieStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
@@ -44,10 +58,6 @@ function renderBizOverview(data) {
     // Средний чек: план = план ателье / план клиентов
     var avgCheckPlan = (t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
     document.getElementById('ov-himch-plan').textContent = avgCheckPlan > 0 ? 'план ' + fmt(avgCheckPlan) : t.fact.clients + ' кл';
-
-    document.getElementById('ov-total-plan').textContent = isCurrentMonth
-      ? totalStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planTotalToday) + ' (' + pctTotalToday + '%)'
-      : 'План: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)';
   }
   // Клиенты: план на текущий день + факт
   if (t.plan && t.plan.clients > 0) {
