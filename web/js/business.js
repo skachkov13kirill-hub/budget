@@ -74,6 +74,19 @@ function renderBizOverview(data) {
     document.getElementById('ov-forecast-sub').textContent = fcPct + '% плана';
   }
 
+  // Погодный бейдж
+  var weatherEl = document.getElementById('ov-weather');
+  if (weatherEl && typeof getWeatherDisplay === 'function') {
+    var wd = getWeatherDisplay();
+    if (wd && wd.correctionPct !== null) {
+      var sign = wd.correctionPct >= 0 ? '+' : '';
+      weatherEl.innerHTML = wd.icon + ' ' + wd.temp + '\u00B0 \u00b7 ' + sign + wd.correctionPct + '%';
+      weatherEl.style.display = '';
+    } else {
+      weatherEl.style.display = 'none';
+    }
+  }
+
   document.getElementById('bizLoading').style.display = 'none';
   document.getElementById('bizOverviewContent').style.display = 'block';
 
@@ -452,13 +465,14 @@ function renderPlanner(data) {
 function calcNetworkForecast(filials) {
   if (!filials) return 0;
   var month = new Date().getMonth() + 1;
+  var wf = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
   return filials.reduce(function(sum, f) {
-    var fc3 = calcForecast3Weeks(f.fact.total, month);
+    var fc3 = calcForecast3Weeks(f.fact.total, month, wf);
     return sum + (fc3 ? fc3.total : f.fact.total);
   }, 0);
 }
 
-function calcForecast3Weeks(factTotal, month) {
+function calcForecast3Weeks(factTotal, month, weatherFactor) {
   var now = new Date();
   var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
   var daysPassed = (now.getMonth() + 1) === month ? Math.max(1, now.getDate() - 1) : ((now.getMonth() + 1) > month ? daysInMonth : 0);
@@ -468,7 +482,8 @@ function calcForecast3Weeks(factTotal, month) {
   var workTotal = daysInMonth - nonWork;
   var workLeft = workTotal - workPassed;
   var dailyAvg = factTotal / workPassed;
-  return { total: Math.round(factTotal + dailyAvg * Math.max(0, workLeft)), daysPassed: workPassed, daysLeft: workLeft, daysInMonth: workTotal, note: '(' + workPassed + ' раб.дн.)' };
+  var adjustedDailyAvg = weatherFactor ? dailyAvg * weatherFactor : dailyAvg;
+  return { total: Math.round(factTotal + adjustedDailyAvg * Math.max(0, workLeft)), daysPassed: workPassed, daysLeft: workLeft, daysInMonth: workTotal, note: '(' + workPassed + ' раб.дн.)', weatherFactor: weatherFactor || null };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -683,12 +698,14 @@ function renderFilials(data) {
 
     var fcHtml = '';
     if (month === nowMonth) {
-      var fc3 = calcForecast3Weeks(f.fact.total, month);
+      var wf = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+      var fc3 = calcForecast3Weeks(f.fact.total, month, wf);
       var fcTotal = fc3 ? fc3.total : f.fact.total;
       var fcPct = f.plan.total > 0 ? Math.round(fcTotal / f.plan.total * 100) : 0;
       var fcEmoji = fcPct >= 95 ? '\uD83D\uDFE2' : fcPct >= 85 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+      var weatherTag = (fc3 && fc3.weatherFactor) ? ' <span style="font-size:9px;color:#7B61FF;opacity:0.7;">(с погодой)</span>' : '';
       fcHtml = '<div style="background:#EEF2FF;padding:10px 12px;border-radius:10px;margin-top:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">' +
-        '<div><div style="color:#7B61FF;font-weight:600;margin-bottom:2px;">\uD83D\uDD2E Прогноз</div></div>' +
+        '<div><div style="color:#7B61FF;font-weight:600;margin-bottom:2px;">\uD83D\uDD2E Прогноз' + weatherTag + '</div></div>' +
         '<div style="text-align:right;"><div style="font-weight:800;font-size:14px;">' + fmt(fcTotal) + ' ' + fcEmoji + '</div><div style="font-size:10px;color:#888;">' + fcPct + '% плана</div></div></div>';
     }
 
@@ -828,7 +845,8 @@ function openNetworkDetail(metricKey) {
         r.shortfall = Math.max(0, r.plan - r.forecast);
       }
     } else if (metricKey === 'forecast') {
-      var fc = calcForecast3Weeks(f.fact.total, month);
+      var wfFc = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+      var fc = calcForecast3Weeks(f.fact.total, month, wfFc);
       r.fact = fc ? fc.total : f.fact.total;
       r.plan = f.plan.total || 0;
       r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
@@ -848,7 +866,8 @@ function openNetworkDetail(metricKey) {
       r.plan = f.plan.atelie || 0;
       r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
       if (isCurrentMonth && dayOfMonth > 0) {
-        var fcA = calcForecast3Weeks(f.fact.atelie, month);
+        var wfA = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+        var fcA = calcForecast3Weeks(f.fact.atelie, month, wfA);
         r.forecast = fcA ? fcA.total : r.fact;
         r.forecastPct = r.plan > 0 ? Math.round(r.forecast / r.plan * 100) : 0;
         r.shortfall = Math.max(0, r.plan - r.forecast);
@@ -858,7 +877,8 @@ function openNetworkDetail(metricKey) {
       r.plan = f.plan.total || 0;
       r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
       if (isCurrentMonth && dayOfMonth > 0) {
-        var fcT = calcForecast3Weeks(f.fact.total, month);
+        var wfT = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+        var fcT = calcForecast3Weeks(f.fact.total, month, wfT);
         r.forecast = fcT ? fcT.total : r.fact;
         r.forecastPct = r.plan > 0 ? Math.round(r.forecast / r.plan * 100) : 0;
         r.shortfall = Math.max(0, r.plan - r.forecast);
@@ -1509,7 +1529,8 @@ function openFilialDetail(f, month) {
   var zoneColor = zone === 'green' ? '#22C55E' : zone === 'yellow' ? '#FFAA00' : '#FF4D4D';
   var nowMonth = new Date().getMonth() + 1;
   var isPast = month < nowMonth;
-  var fc3 = !isPast ? calcForecast3Weeks(f.fact.total, month) : null;
+  var wfDetail = !isPast && typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+  var fc3 = !isPast ? calcForecast3Weeks(f.fact.total, month, wfDetail) : null;
   var fcTotal = fc3 ? fc3.total : f.fact.total;
   var fcPct = f.plan.total > 0 ? Math.round(fcTotal / f.plan.total * 100) : 0;
   var perfAtelie = f.performance.atelie || 0;
@@ -1524,7 +1545,7 @@ function openFilialDetail(f, month) {
       '<div class="filial-detail-name">' + f.name + '</div>' +
       '<div class="filial-detail-sub">' + MONTH_NAMES_CAP[month] + ' ' + year +
         ' \u00b7 ' + perf + '% плана' +
-        (isPast ? ' \u00b7 закрыт' : ' \u00b7 прогноз ' + fcPct + '%') +
+        (isPast ? ' \u00b7 закрыт' : ' \u00b7 прогноз ' + fcPct + '%' + (wfDetail ? ' (с погодой)' : '')) +
       '</div>' +
     '</div>' +
     '<div class="filial-detail-stats">' +

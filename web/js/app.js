@@ -68,6 +68,9 @@ function refreshAll() {
   showToast('Обновление...');
 
   var month = new Date().getMonth() + 1;
+  // Обновить погоду при refresh
+  if (typeof fetchWeather === 'function') fetchWeather();
+
   Promise.all([
     fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetchWithTimeout(API_ATELIE + '?action=getAll', 15000).then(function(r) { return r.json(); }).catch(function() { return null; })
@@ -348,6 +351,9 @@ window.onload = function() {
     showLastUpdate();
     document.getElementById('headerSubtitle').textContent = 'Из кеша \u00b7 обновление...';
   }
+
+  // Load weather data (non-blocking)
+  if (typeof fetchWeather === 'function') fetchWeather();
 
   // Load fresh data from APIs
   refreshAll();

@@ -1446,3 +1446,11 @@ body {
   border: 2px solid transparent; transition: border 0.15s;
 }
 .tasks-color-dot.active { border-color: var(--text); }
+
+/* Weather badge */
+.weather-badge {
+  font-size: 10px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 3px;
+  letter-spacing: 0.3px;
+}
