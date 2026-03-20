@@ -74,13 +74,19 @@ function renderBizOverview(data) {
     document.getElementById('ov-forecast-sub').textContent = fcPct + '% плана';
   }
 
-  // Погодный бейдж
+  // Погодный бейдж со стрелкой дельты
   var weatherEl = document.getElementById('ov-weather');
   if (weatherEl && typeof getWeatherDisplay === 'function') {
     var wd = getWeatherDisplay();
-    if (wd && wd.correctionPct !== null) {
-      var sign = wd.correctionPct >= 0 ? '+' : '';
-      weatherEl.innerHTML = wd.icon + ' ' + wd.temp + '\u00B0 \u00b7 ' + sign + wd.correctionPct + '%';
+    if (wd && wd.correctionPct !== null && data.filials) {
+      var fcWithout = 0;
+      data.filials.forEach(function(f) {
+        var fc0 = calcForecast3Weeks(f.fact.total, month, null);
+        fcWithout += fc0 ? fc0.total : f.fact.total;
+      });
+      var delta = netForecast - fcWithout;
+      var arrow = delta >= 0 ? '\u2191' : '\u2193';
+      weatherEl.innerHTML = wd.icon + ' ' + wd.temp + '\u00B0 ' + arrow + fmtShort(Math.abs(delta));
       weatherEl.style.display = '';
     } else {
       weatherEl.style.display = 'none';
@@ -703,10 +709,18 @@ function renderFilials(data) {
       var fcTotal = fc3 ? fc3.total : f.fact.total;
       var fcPct = f.plan.total > 0 ? Math.round(fcTotal / f.plan.total * 100) : 0;
       var fcEmoji = fcPct >= 95 ? '\uD83D\uDFE2' : fcPct >= 85 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-      var weatherTag = (fc3 && fc3.weatherFactor) ? ' <span style="font-size:9px;color:#7B61FF;opacity:0.7;">(с погодой)</span>' : '';
+      var weatherDelta = '';
+      if (fc3 && fc3.weatherFactor) {
+        var fc0 = calcForecast3Weeks(f.fact.total, month, null);
+        var d0 = fc0 ? (fcTotal - fc0.total) : 0;
+        if (d0 !== 0) {
+          var arr = d0 >= 0 ? '\u2191' : '\u2193';
+          weatherDelta = ' <span style="font-size:10px;color:#7B61FF;">' + arr + fmtShort(Math.abs(d0)) + '</span>';
+        }
+      }
       fcHtml = '<div style="background:#EEF2FF;padding:10px 12px;border-radius:10px;margin-top:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">' +
-        '<div><div style="color:#7B61FF;font-weight:600;margin-bottom:2px;">\uD83D\uDD2E Прогноз' + weatherTag + '</div></div>' +
-        '<div style="text-align:right;"><div style="font-weight:800;font-size:14px;">' + fmt(fcTotal) + ' ' + fcEmoji + '</div><div style="font-size:10px;color:#888;">' + fcPct + '% плана</div></div></div>';
+        '<div><div style="color:#7B61FF;font-weight:600;margin-bottom:2px;">\uD83D\uDD2E Прогноз</div></div>' +
+        '<div style="text-align:right;"><div style="font-weight:800;font-size:14px;">' + fmt(fcTotal) + ' ' + fcEmoji + weatherDelta + '</div><div style="font-size:10px;color:#888;">' + fcPct + '% плана</div></div></div>';
     }
 
     var card = document.createElement('div');

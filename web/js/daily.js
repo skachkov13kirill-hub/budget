@@ -114,6 +114,64 @@ function renderDailyChart(data) {
     html += '</div>';
   }
 
+  // ── ПРОГНОЗНЫЕ ДНИ (до 10 дней вперёд) ──
+  var forecastDays = buildForecastDays(days, plan);
+  if (forecastDays.length > 0) {
+    // Сохраняем прогнозы для проверки точности
+    saveDailyForecasts(forecastDays);
+
+    html += '<div style="margin-top:16px;padding:10px 0 6px;display:flex;align-items:center;gap:8px;">';
+    html += '<div style="font-size:14px;font-weight:700;color:#7B61FF;">\uD83D\uDD2E Прогноз</div>';
+    html += '<div style="font-size:11px;color:#999;">' + forecastDays.length + ' дней вперёд</div>';
+    html += '</div>';
+
+    var maxFcAtelie = Math.max(maxAtelie, Math.max.apply(null, forecastDays.map(function(d) { return d.atelie; })) * 1.1);
+
+    for (var fi = 0; fi < forecastDays.length; fi++) {
+      var fd = forecastDays[fi];
+      var pctFcAtelie = Math.round(fd.atelie / maxFcAtelie * 100);
+      var isWeekendFc = fd.weekday === 0 || fd.weekday === 6;
+      var bgFc = isWeekendFc ? '#F5F3FF' : '#FAFAFF';
+      var dayNameFc = WEEKDAYS[fd.weekday];
+      var abovePlanFc = fd.atelie >= plan.dailyAtelie;
+
+      // Проверяем точность вчерашнего прогноза
+      var accuracyHtml = '';
+      var acc = checkForecastAccuracy(fd.dateKey, days);
+      if (acc) {
+        var accPct = acc.fact > 0 ? Math.round((acc.predicted / acc.fact - 1) * 100) : 0;
+        var accColor = Math.abs(accPct) <= 10 ? '#22C55E' : Math.abs(accPct) <= 20 ? '#FFAA00' : '#FF4D4D';
+        var accSign = accPct >= 0 ? '+' : '';
+        accuracyHtml = '<div style="font-size:10px;color:' + accColor + ';font-weight:600;margin-top:3px;">' +
+          '\u2714 факт ' + fmtShort(acc.fact) + ' \u00b7 \u0394' + accSign + accPct + '%</div>';
+      }
+
+      html += '<div style="background:' + bgFc + ';border-radius:10px;padding:10px 12px;margin-bottom:4px;border:1px dashed #C4B5FD;">';
+
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      html += '<div style="font-size:13px;font-weight:500;color:#7B61FF;">';
+      html += fd.dateShort + ' <span style="color:#A29BFE;font-weight:400;">' + dayNameFc + '</span>';
+      if (isWeekendFc) html += ' <span style="font-size:9px;color:#A29BFE;">\u{1F4A4}</span>';
+      if (fd.weatherIcon) html += ' <span style="font-size:11px;">' + fd.weatherIcon + fd.temp + '\u00B0</span>';
+      html += '</div>';
+      html += '<div style="text-align:right;">';
+      html += '<span style="font-size:14px;font-weight:700;color:#7B61FF;">' + fmtShort(fd.atelie) + '</span>';
+      html += '<span style="font-size:11px;color:#A29BFE;margin-left:8px;">' + fd.clients + ' кл</span>';
+      html += '</div>';
+      html += '</div>';
+
+      // Бар
+      html += '<div style="position:relative;height:16px;background:#EDE9FE;border-radius:4px;">';
+      html += '<div style="height:100%;width:' + Math.min(pctFcAtelie, 100) + '%;background:linear-gradient(90deg,#A29BFE,#7B61FF);border-radius:4px;opacity:0.6;"></div>';
+      html += '<div style="position:absolute;top:0;bottom:0;left:' + Math.min(planPctAtelie, 100) + '%;width:2px;background:#FF6B6B;opacity:0.5;"></div>';
+      html += '</div>';
+
+      if (accuracyHtml) html += accuracyHtml;
+
+      html += '</div>';
+    }
+  }
+
   // Итого за 2 недели
   var totalAt = days.reduce(function(s, d) { return s + d.atelie; }, 0);
   var totalCl = days.reduce(function(s, d) { return s + d.clients; }, 0);
@@ -171,6 +229,140 @@ function toggleDailyDetail(dayIndex) {
 
   el.innerHTML = html;
   el.style.display = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ПРОГНОЗНЫЕ ДНИ — 10 дней вперёд с учётом будней/выходных и погоды
+// ═══════════════════════════════════════════════════════════════
+
+function buildForecastDays(realDays, plan) {
+  if (!realDays || realDays.length < 3) return [];
+
+  // Считаем средний оборот/клиентов отдельно для будней и выходных
+  var weekdayTotals = { atelie: 0, clients: 0, count: 0 };
+  var weekendTotals = { atelie: 0, clients: 0, count: 0 };
+
+  realDays.forEach(function(d) {
+    var isWe = d.weekday === 0 || d.weekday === 6;
+    if (isWe) {
+      weekendTotals.atelie += d.atelie;
+      weekendTotals.clients += d.clients;
+      weekendTotals.count++;
+    } else {
+      weekdayTotals.atelie += d.atelie;
+      weekdayTotals.clients += d.clients;
+      weekdayTotals.count++;
+    }
+  });
+
+  var avgWeekday = weekdayTotals.count > 0
+    ? { atelie: Math.round(weekdayTotals.atelie / weekdayTotals.count), clients: Math.round(weekdayTotals.clients / weekdayTotals.count) }
+    : { atelie: plan.dailyAtelie, clients: plan.dailyClients };
+  var avgWeekend = weekendTotals.count > 0
+    ? { atelie: Math.round(weekendTotals.atelie / weekendTotals.count), clients: Math.round(weekendTotals.clients / weekendTotals.count) }
+    : { atelie: Math.round(avgWeekday.atelie * 0.7), clients: Math.round(avgWeekday.clients * 0.7) };
+
+  // Средний чек для расчёта клиентов из оборота
+  var totalAt = realDays.reduce(function(s, d) { return s + d.atelie; }, 0);
+  var totalCl = realDays.reduce(function(s, d) { return s + d.clients; }, 0);
+  var avgCheck = totalCl > 0 ? Math.round(totalAt / totalCl) : 1200;
+
+  // Погодные данные
+  var weatherData = typeof loadWeatherCache === 'function' ? loadWeatherCache() : null;
+  var month = new Date().getMonth() + 1;
+
+  // Генерируем 10 будущих дней (в рамках текущего месяца)
+  var now = new Date();
+  var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
+  var result = [];
+
+  for (var offset = 1; offset <= 10; offset++) {
+    var futureDay = now.getDate() + offset;
+    if (futureDay > daysInMonth) break; // не выходим за месяц
+
+    var futureDate = new Date(now.getFullYear(), now.getMonth(), futureDay);
+    var wd = futureDate.getDay(); // 0=Вс, 6=Сб
+    var isWeekend = wd === 0 || wd === 6;
+
+    var base = isWeekend ? avgWeekend : avgWeekday;
+    var atelie = base.atelie;
+
+    // Погодная коррекция для конкретного дня
+    var weatherIcon = '';
+    var temp = null;
+    if (weatherData && weatherData.dates) {
+      var dateStr = futureDate.getFullYear() + '-' + String(month).padStart(2, '0') + '-' + String(futureDay).padStart(2, '0');
+      var wIdx = weatherData.dates.indexOf(dateStr);
+      if (wIdx !== -1) {
+        var avgTemp = (weatherData.maxTemps[wIdx] + weatherData.minTemps[wIdx]) / 2;
+        temp = Math.round(avgTemp);
+        weatherIcon = typeof tempToIcon === 'function' ? tempToIcon(avgTemp) : '';
+        var factor = typeof calcDayWeatherFactor === 'function' ? calcDayWeatherFactor(avgTemp, month) : 1;
+        atelie = Math.round(atelie * factor);
+      }
+    }
+
+    var clients = avgCheck > 0 ? Math.round(atelie / avgCheck) : 0;
+
+    result.push({
+      dateKey: futureDate.getFullYear() + '-' + String(month).padStart(2, '0') + '-' + String(futureDay).padStart(2, '0'),
+      dateShort: String(futureDay).padStart(2, '0') + '.' + String(month).padStart(2, '0'),
+      weekday: wd,
+      atelie: atelie,
+      clients: clients,
+      weatherIcon: weatherIcon,
+      temp: temp
+    });
+  }
+
+  return result;
+}
+
+// ── Сохранение прогнозов для проверки точности ──
+var FORECAST_STORE_KEY = 'daily_forecasts';
+
+function saveDailyForecasts(forecastDays) {
+  try {
+    var stored = JSON.parse(localStorage.getItem(FORECAST_STORE_KEY) || '{}');
+    forecastDays.forEach(function(fd) {
+      // Записываем только если ещё нет прогноза на этот день (первый прогноз — самый ценный)
+      if (!stored[fd.dateKey]) {
+        stored[fd.dateKey] = { atelie: fd.atelie, clients: fd.clients, savedAt: Date.now() };
+      }
+    });
+    // Чистим старые (>60 дней)
+    var cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    Object.keys(stored).forEach(function(k) {
+      if (stored[k].savedAt && stored[k].savedAt < cutoff) delete stored[k];
+    });
+    localStorage.setItem(FORECAST_STORE_KEY, JSON.stringify(stored));
+  } catch(e) {}
+}
+
+// ── Проверка: был ли прогноз на этот день и сколько реально получилось ──
+function checkForecastAccuracy(dateKey, realDays) {
+  try {
+    var stored = JSON.parse(localStorage.getItem(FORECAST_STORE_KEY) || '{}');
+    if (!stored[dateKey]) return null;
+
+    // Ищем реальные данные за этот день
+    var parts = dateKey.split('-');
+    var targetDate = parts[2] + '.' + parts[1];
+    var realDay = null;
+    for (var i = 0; i < realDays.length; i++) {
+      if (realDays[i].date === targetDate) {
+        realDay = realDays[i];
+        break;
+      }
+    }
+
+    if (!realDay || realDay.atelie === 0) return null;
+
+    return {
+      predicted: stored[dateKey].atelie,
+      fact: realDay.atelie
+    };
+  } catch(e) { return null; }
 }
 
 // ── Автозагрузка при переходе на вкладку ──
