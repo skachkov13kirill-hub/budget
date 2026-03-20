@@ -254,17 +254,28 @@ function getOverlay(id) {
     el = document.createElement('div');
     el.id = id;
     el.className = 'overlay-bg';
-    el.innerHTML = '<div class="overlay-panel" style="position:relative;">' +
-      '<button class="overlay-close-x" onclick="closeOverlay(\'' + id + '\')">&times;</button>' +
-      '</div>';
+    el.innerHTML = '<div class="overlay-panel"></div>';
     el.addEventListener('click', function(e) { if (e.target === el) closeOverlay(id); });
     document.body.appendChild(el);
   }
   return el;
 }
 function showOverlay(id) {
-  document.getElementById(id).style.display = 'block';
+  var el = document.getElementById(id);
+  el.style.display = 'block';
   document.body.style.overflow = 'hidden';
+  // Ensure X button after content is set
+  var panel = el.querySelector('.overlay-panel');
+  if (panel) {
+    var existing = panel.querySelector('.overlay-close-x');
+    if (existing) existing.remove();
+    panel.style.position = 'relative';
+    var btn = document.createElement('button');
+    btn.className = 'overlay-close-x';
+    btn.innerHTML = '&times;';
+    btn.onclick = function() { closeOverlay(id); };
+    panel.insertBefore(btn, panel.firstChild);
+  }
 }
 function closeOverlay(id) {
   var el = document.getElementById(id);
