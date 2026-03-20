@@ -254,7 +254,9 @@ function getOverlay(id) {
     el = document.createElement('div');
     el.id = id;
     el.className = 'overlay-bg';
-    el.innerHTML = '<div class="overlay-panel"></div>';
+    el.innerHTML = '<div class="overlay-panel" style="position:relative;">' +
+      '<button class="overlay-close-x" onclick="closeOverlay(\'' + id + '\')">&times;</button>' +
+      '</div>';
     el.addEventListener('click', function(e) { if (e.target === el) closeOverlay(id); });
     document.body.appendChild(el);
   }

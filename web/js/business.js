@@ -21,7 +21,23 @@ function renderBizOverview(data) {
   document.getElementById('ov-atelie').textContent = fmt(t.fact.atelie);
   document.getElementById('ov-himch').textContent = fmt(t.fact.avgCheck || 0);
   document.getElementById('ov-clients').textContent = t.fact.clients.toLocaleString('ru-RU');
-  document.getElementById('ov-profit').textContent = fmt(t.fact.profit);
+
+  // Химчистка — суммируем из филиалов (надёжнее чем totals)
+  var himchFact = 0;
+  if (data.filials) data.filials.forEach(function(f) { himchFact += (f.fact.himchistka || 0); });
+  if (!himchFact) himchFact = t.fact.himchistka || 0;
+  document.getElementById('ov-himch-fact').textContent = fmt(himchFact);
+  var himchPlan = (t.plan && t.plan.himchistka) ? t.plan.himchistka : 0;
+  if (himchPlan > 0) {
+    var planHimchToday = Math.round(himchPlan * dayRatio);
+    var pctHimch = planHimchToday > 0 ? Math.round(himchFact / planHimchToday * 100) : 0;
+    var himchStatus = pctHimch >= 100 ? '\u2705' : pctHimch >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    document.getElementById('ov-himch-sub').textContent = isCurrentMonth
+      ? himchStatus + ' план ' + daysWithData + '\u0434: ' + fmtShort(planHimchToday) + ' (' + pctHimch + '%)'
+      : '\u041F\u043B\u0430\u043D: ' + fmtShort(himchPlan) + ' (' + (t.performance.himchistka || 0) + '%)';
+  } else {
+    document.getElementById('ov-himch-sub').textContent = '';
+  }
 
   // «На счетах» — калькулятор целевого баланса (900К к концу месяца)
   var ACCOUNT_TARGET = 900000;

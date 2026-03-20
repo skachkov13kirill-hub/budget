@@ -181,6 +181,30 @@ function renderPaymentsTab() {
     '</div>';
   });
 
+  // Rent section — аренда по филиалам
+  if (state.branches && state.branches.filials) {
+    var rentTotal = 0;
+    var rentItems = [];
+    state.branches.filials.forEach(function(f) {
+      var rent = parseFloat(f.fact.rent) || 0;
+      if (rent > 0) {
+        rentTotal += rent;
+        rentItems.push({ name: f.name || f.code, rent: rent });
+      }
+    });
+    if (rentItems.length > 0) {
+      html += '<div style="margin-top:16px;padding:12px 0 6px;border-top:2px solid #eee;">' +
+        '<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:8px;">\uD83C\uDFE0 \u0410\u0440\u0435\u043D\u0434\u0430 \u2014 ' + fmtShort(rentTotal) + '</div>';
+      rentItems.forEach(function(r) {
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
+          '<span style="font-size:13px;color:#555;">' + r.name + '</span>' +
+          '<span style="font-size:13px;font-weight:600;">' + fmtShort(r.rent) + '</span>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+  }
+
   // Extra income card
   html += '<div class="pay-card pay-card-income' + (extraReceived ? ' pay-card-done' : '') + '" onclick="toggleExtraIncome()">' +
     '<div class="pay-card-top">' +
