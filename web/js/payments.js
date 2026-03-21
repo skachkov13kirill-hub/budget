@@ -5,18 +5,27 @@
 
 var EXTRA_INCOME = 100000;
 
+// ── СУБАРЕНДА (возврат с 1 по 10 число) ──
+var SUBRENT_ITEMS = [
+  { name: 'М16 субаренда', amount: 27000, day: 10 },
+  { name: 'Г4 субаренда', amount: 34000, day: 10 },
+  { name: 'В22 субаренда (65К)', amount: 65000, day: 10 },
+  { name: 'В22 субаренда (27К)', amount: 27000, day: 10 }
+];
+
 // ── RENT DATA (аренда по филиалам) ──
+// Реальная аренда — что Кирилл платит (после субаренды, с КУ). Актуально 21.03.2026
 var RENT_ITEMS = [
-  { name: 'М16 (Менделеева 16)', amount: 42000, day: 28 },
+  { name: 'М16 (Менделеева 16)', amount: 21500, day: 28 },
   { name: 'В8 (Воронцовский 8)', amount: 50000, day: 28 },
-  { name: 'П14 (Петровский 14)', amount: 67800, day: 28 },
-  { name: 'А6 (Арсенальная 6)', amount: 27500, day: 28 },
-  { name: 'Г4 (Графская 4)', amount: 68000, day: 28 },
-  { name: 'В22 (Воронцовский 22)', amount: 135000, day: 28 },
+  { name: 'П14 (Петровский 14)', amount: 80000, day: 28 },
+  { name: 'А6 (Арсенальная 6)', amount: 34062, day: 28 },
+  { name: 'Г4 (Графская 4)', amount: 34000, day: 28 },
+  { name: 'В22 (Воронцовский 22)', amount: 55000, day: 28 },
   { name: 'Е8 (Екатерининская 8)', amount: 45000, day: 28 },
   { name: 'В20 (Воронцовский 20)', amount: 30000, day: 28 },
   { name: 'Е17 (Екатерининская 17)', amount: 41500, day: 28 },
-  { name: 'Г11 (Графская 11)', amount: 25000, day: 28 }
+  { name: 'Г11 (Графская 11)', amount: 27000, day: 28 }
 ];
 
 // ── STORAGE ──
@@ -47,6 +56,14 @@ function toggleRentPayment(idx, method) {
   if (data[idx] === method) { delete data[idx]; }
   else { data[idx] = method; }
   savePaymentsData(data, 'dresscode_rent');
+  renderPaymentsTab();
+}
+
+function toggleSubrentPayment(idx, method) {
+  var data = getPaymentsData('dresscode_subrent');
+  if (data[idx] === method) { delete data[idx]; }
+  else { data[idx] = method; }
+  savePaymentsData(data, 'dresscode_subrent');
   renderPaymentsTab();
 }
 
@@ -111,6 +128,22 @@ function buildRentItems(rentData, today) {
   return items;
 }
 
+function buildSubrentItems(subrentData, today) {
+  var items = [];
+  SUBRENT_ITEMS.forEach(function(r, i) {
+    items.push({
+      idx: i,
+      name: r.name,
+      amount: r.amount,
+      day: r.day,
+      paidMethod: subrentData[i] || null,
+      isToday: r.day === today,
+      isPast: r.day > 0 && r.day < today
+    });
+  });
+  return items;
+}
+
 // ── RENDER BLOCK OF CARDS ──
 function renderPaymentCards(items, toggleFn) {
   var html = '';
@@ -154,9 +187,11 @@ function renderPaymentsTab() {
 
   var creditPayData = getPaymentsData('dresscode_payments');
   var rentPayData = getPaymentsData('dresscode_rent');
+  var subrentPayData = getPaymentsData('dresscode_subrent');
 
   var creditItems = buildCreditItems(creditPayData, today);
   var rentItems = buildRentItems(rentPayData, today);
+  var subrentItems = buildSubrentItems(subrentPayData, today);
   var allItems = creditItems.concat(rentItems);
 
   if (creditItems.length === 0 && rentItems.length === 0) {
@@ -249,29 +284,19 @@ function renderPaymentsTab() {
     html += renderPaymentCards(rentItems, 'toggleRentPayment');
   }
 
-  // Аренда по филиалам
-  var RENTS = [
-    {name: '\u041C\u0435\u043D\u0434\u0435\u043B\u0435\u0435\u0432\u0430 16', rent: 29500},
-    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 8', rent: 50000},
-    {name: '\u041F\u0435\u0442\u0440\u043E\u0432\u0441\u043A\u0438\u0439 14', rent: 80000},
-    {name: '\u0410\u0440\u0441\u0435\u043D\u0430\u043B\u044C\u043D\u0430\u044F 6', rent: 32562},
-    {name: '\u0410\u0440\u0441\u0435\u043D\u0430\u043B\u044C\u043D\u0430\u044F 6 \u0412\u044B\u0432\u0435\u0441\u043A\u0430', rent: 1500},
-    {name: '\u0413\u0440\u0430\u0444\u0441\u043A\u0430\u044F 11', rent: 25000},
-    {name: '\u0413\u0440\u0430\u0444\u0441\u043A\u0430\u044F 4', rent: 34000},
-    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 22', rent: 50000},
-    {name: '\u0415\u043A\u0430\u0442\u0435\u0440\u0438\u043D\u0438\u043D\u0441\u043A\u0430\u044F 8', rent: 45000},
-    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 20', rent: 30000},
-    {name: '\u0415\u043A\u0430\u0442\u0435\u0440\u0438\u043D\u0438\u043D\u0441\u043A\u0430\u044F 17', rent: 41500}
-  ];
-  var rentTotal = RENTS.reduce(function(s, r) { return s + r.rent; }, 0);
-  html += '<div style="margin-top:16px;padding:12px 0 6px;border-top:2px solid #eee;">' +
-    '<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:8px;">\uD83C\uDFE0 \u0410\u0440\u0435\u043D\u0434\u0430 \u2014 ' + fmtShort(rentTotal) + '</div>';
-  RENTS.forEach(function(r) {
-    html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
-      '<span style="font-size:13px;color:#555;">' + r.name + '</span>' +
-      '<span style="font-size:13px;font-weight:600;">' + fmtShort(r.rent) + '</span></div>';
-  });
-  html += '</div>';
+  // ── БЛОК 3: СУБАРЕНДА (доход, с 1 по 10 число) ──
+  if (subrentItems.length > 0) {
+    var subrentTotal = 0, subrentReceived = 0;
+    subrentItems.forEach(function(p) {
+      subrentTotal += p.amount;
+      if (p.paidMethod) subrentReceived += p.amount;
+    });
+    html += '<div class="pay-section-header">' +
+      '<span class="pay-section-title" style="color:var(--green);">Субаренда (возврат)</span>' +
+      '<span class="pay-section-sum" style="color:var(--green);">+' + fmtShort(subrentTotal) + '</span>' +
+    '</div>';
+    html += renderPaymentCards(subrentItems, 'toggleSubrentPayment');
+  }
 
   // Extra income card
   html += '<div class="pay-card pay-card-income' + (extraReceived ? ' pay-card-done' : '') + '" onclick="toggleExtraIncome()">' +
