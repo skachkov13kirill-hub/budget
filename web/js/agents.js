@@ -92,5 +92,35 @@ function renderAgentsTab() {
 }
 
 function agentAction(agentId) {
-  showToast('Агент ' + agentId + ': запуск через Claude Code');
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Отправляю...';
+
+  var url = typeof APPS_SCRIPT_URL !== 'undefined' ? APPS_SCRIPT_URL :
+    'https://script.google.com/macros/s/AKfycbxfN2eYhdWamLmTuR6I4unWFpNA4iOD5QxzaKWASZmW6G8El_FWk3vOi1wE7x4AUNasVA/exec';
+
+  fetch(url + '?action=queueAgent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ agent: agentId })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      btn.textContent = 'В очереди ✓';
+      btn.classList.add('ag-btn-queued');
+      showToast('Агент ' + agentId + ' добавлен в очередь');
+    } else {
+      btn.textContent = 'Ошибка';
+      btn.disabled = false;
+      showToast('Ошибка: ' + (data.error || 'неизвестная'));
+    }
+  })
+  .catch(function(err) {
+    btn.textContent = 'Ошибка сети';
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.textContent = 'Запустить радар';
+    }, 3000);
+  });
 }

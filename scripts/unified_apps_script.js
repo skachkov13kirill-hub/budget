@@ -8,6 +8,16 @@
 const ATELIE_SPREADSHEET_ID = '1cRdejpUv8gRyNTQVJPw16pp44FqmX6CZUSdUkWcUa40';  // Таблица "АТЕЛЬЕ 2026"
 const FAMILY_SPREADSHEET_ID = '13ZsaVLG_GJMWGvzOOyg17H8pss-eQGhu1X8yZ9nAVVg';  // Таблица семейного бюджета
 
+// ─── TELEGRAM УВЕДОМЛЕНИЯ ───
+const TG_BOT_TOKEN = '8013929400:AAHpjk1xy2WH1VHT9LwLxd3a5fMR3S4-aC0';
+const TG_CHAT_ID = '470830950';
+const BRANCH_FULL_NAMES = {
+  'М16': 'Менделеева 16', 'В8': 'Воронцовский 8', 'П14': 'Петровский 14',
+  'А6': 'Арсенальная 6', 'Г4': 'Графская 4', 'В22': 'Воронцовский 22',
+  'Е8': 'Екатерининский 8', 'В20': 'Воронцовский 20', 'Е17': 'Екатерининская 17',
+  'Г11': 'Графская 11'
+};
+
 // ═══════════════════════════════════════════════════════════════
 // РОУТЕР — ТОЧКА ВХОДА
 // ═══════════════════════════════════════════════════════════════
@@ -48,6 +58,12 @@ function doGet(e) {
 
         // ─── БЛОКНОТ ФИЛИАЛОВ ───
         case 'getBranchNotes': result = handleGetBranchNotes(e); break;
+
+        // ─── ОЧЕРЕДЬ АГЕНТОВ ───
+        case 'getQueue':      result = handleGetQueue(e); break;
+
+        // ─── ЕЖЕДНЕВНАЯ СВОДКА ───
+        case 'dailySummary':  result = sendDailySummary(); break;
 
         default:
           result = { success: false, error: 'Unknown action: ' + action };
@@ -112,6 +128,10 @@ function doPost(e) {
         case 'updateSetting':    result = handleUpdateSetting(data); break;
         case 'writeBranchDaily': result = writeBranchDaily(data); break;
         case 'uploadReportPhoto': result = handleUploadReportPhoto(data); break;
+
+        // ─── ОЧЕРЕДЬ АГЕНТОВ ───
+        case 'queueAgent':       result = handleQueueAgent(data); break;
+        case 'updateQueue':      result = handleUpdateQueue(data); break;
 
         // ─── БЛОКНОТ ФИЛИАЛОВ ───
         case 'addBranchNote':    result = handleAddBranchNote(data); break;
@@ -1657,6 +1677,9 @@ function writeBranchDaily(data) {
              ' atelie=' + data.atelie + ' clients=' + data.clients +
              ' cash=' + (data.cash || 0) + ' card=' + (data.card || 0) + ' row=' + targetRow);
 
+  // Уведомление в Telegram
+  try { notifyBranchReport(data); } catch(tgErr) { Logger.log('TG notify error: ' + tgErr); }
+
   return {
     success: true,
     branch: data.branch,
@@ -1990,4 +2013,215 @@ function handleDeleteBranchNote(data) {
   }
 
   return { success: true, deleted: rowsToDelete.length };
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TELEGRAM УВЕДОМЛЕНИЯ
+// ═══════════════════════════════════════════════════════════════
+
+function sendTelegram(text) {
+  var url = 'https://api.telegram.org/bot' + TG_BOT_TOKEN + '/sendMessage';
+  UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      chat_id: TG_CHAT_ID,
+      text: text,
+      parse_mode: 'HTML'
+    }),
+    muteHttpExceptions: true
+  });
+}
+
+function fmtMoney(n) {
+  if (!n) return '0';
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '₽';
+}
+
+function notifyBranchReport(data) {
+  var name = BRANCH_FULL_NAMES[data.branch] || data.branch;
+  var lines = [
+    '<b>' + name + '</b> — отчёт сдан ✓',
+    '',
+    'Оборот: ' + fmtMoney(data.atelie),
+    'Клиенты: ' + (data.clients || 0)
+  ];
+  if (data.hcAtelie && data.hcAtelie > 0) {
+    lines.push('Химчистка: ' + fmtMoney(data.hcAtelie));
+  }
+  sendTelegram(lines.join('\n'));
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ИТОГ ДНЯ — вызывается триггером в 23:59
+// Установить триггер: setupDailySummaryTrigger()
+// ═══════════════════════════════════════════════════════════════
+
+function setupDailySummaryTrigger() {
+  // Удалить старые триггеры этой функции
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sendDailySummary') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  // Новый триггер: каждый день в 23:50
+  ScriptApp.newTrigger('sendDailySummary')
+    .timeBased()
+    .everyDays(1)
+    .atHour(23)
+    .nearMinute(50)
+    .create();
+  Logger.log('Триггер sendDailySummary установлен на 23:50');
+}
+
+function sendDailySummary() {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var today = new Date();
+  var targetDay = today.getDate();
+  var targetMonth = today.getMonth() + 1;
+  var targetYear = today.getFullYear();
+
+  var monthNames = [
+    'Январь','Февраль','Март','Апрель','Май','Июнь',
+    'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'
+  ];
+  var targetMonthName = monthNames[targetMonth - 1];
+
+  var branches = ['М16','В8','П14','А6','Г4','В22','Е8','В20','Е17','Г11'];
+  var totalAtelie = 0;
+  var totalClients = 0;
+  var totalHC = 0;
+  var reported = [];
+  var notReported = [];
+
+  for (var b = 0; b < branches.length; b++) {
+    var code = branches[b];
+    var sheet = ss.getSheetByName(code);
+    if (!sheet) { notReported.push(code); continue; }
+
+    var values = sheet.getDataRange().getValues();
+    var headerRow = values[0];
+    var dateCol = -1;
+    for (var col = 0; col < headerRow.length; col++) {
+      if (String(headerRow[col]).trim() === 'Дата') { dateCol = col; break; }
+    }
+    if (dateCol < 0) { notReported.push(code); continue; }
+
+    var atCol = dateCol + 1;
+    var klCol = dateCol + 2;
+
+    var inMonth = false;
+    var found = false;
+
+    for (var r = 1; r < values.length; r++) {
+      var cell = values[r][dateCol];
+      var isDate = cell instanceof Date;
+      var cellStr = isDate ? '' : String(cell).trim();
+
+      if (!isDate && cellStr === targetMonthName) { inMonth = true; continue; }
+      if (inMonth) {
+        if (!isDate && (cellStr.indexOf('>') >= 0)) break;
+        if (!isDate && monthNames.indexOf(cellStr) >= 0 && cellStr !== targetMonthName) break;
+        if (isDate && cell.getFullYear() === targetYear && (cell.getMonth()+1) === targetMonth && cell.getDate() === targetDay) {
+          var atelie = values[r][atCol] || 0;
+          var clients = values[r][klCol] || 0;
+          if (atelie > 0) {
+            totalAtelie += atelie;
+            totalClients += clients;
+            reported.push(code);
+            found = true;
+          }
+          break;
+        }
+      }
+    }
+    if (!found) notReported.push(code);
+  }
+
+  var dayStr = targetDay + '.' + (targetMonth < 10 ? '0' : '') + targetMonth;
+  var lines = ['<b>Итоги дня — ' + dayStr + '</b>', ''];
+
+  lines.push('Оборот ателье: ' + fmtMoney(totalAtelie));
+  lines.push('Клиенты: ' + totalClients);
+
+  if (totalHC > 0) {
+    lines.push('Химчистка: ' + fmtMoney(totalHC));
+  }
+
+  lines.push('');
+  lines.push('Сдали: ' + reported.length + ' из ' + branches.length);
+
+  if (notReported.length > 0) {
+    var names = [];
+    for (var i = 0; i < notReported.length; i++) {
+      names.push(BRANCH_FULL_NAMES[notReported[i]] || notReported[i]);
+    }
+    lines.push('Не сдали: ' + names.join(', '));
+  }
+
+  sendTelegram(lines.join('\n'));
+  return { success: true, reported: reported.length, notReported: notReported.length };
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ОЧЕРЕДЬ АГЕНТОВ — запуск из дашборда
+// Лист "Очередь" в таблице АТЕЛЬЕ 2026
+// Столбцы: A=ID, B=Агент, C=Время, D=Статус (pending/done/error), E=Результат
+// ═══════════════════════════════════════════════════════════════
+
+function handleQueueAgent(data) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) {
+    sheet = ss.insertSheet('Очередь');
+    sheet.getRange(1, 1, 1, 5).setValues([['ID', 'Агент', 'Время', 'Статус', 'Результат']]);
+  }
+
+  var id = Utilities.getUuid().substring(0, 8);
+  var now = Utilities.formatDate(new Date(), 'Europe/Moscow', 'yyyy-MM-dd HH:mm:ss');
+  sheet.appendRow([id, data.agent, now, 'pending', '']);
+
+  sendTelegram('🤖 Агент <b>' + data.agent + '</b> добавлен в очередь\nВыполнится в следующем чате с Claude');
+
+  return { success: true, id: id, agent: data.agent, time: now };
+}
+
+function handleGetQueue(e) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) return { success: true, tasks: [] };
+
+  var raw = sheet.getDataRange().getValues();
+  var tasks = [];
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][3] === 'pending') {
+      tasks.push({
+        id: raw[i][0],
+        agent: raw[i][1],
+        time: raw[i][2],
+        status: raw[i][3]
+      });
+    }
+  }
+  return { success: true, tasks: tasks };
+}
+
+function handleUpdateQueue(data) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) return { success: false, error: 'Лист Очередь не найден' };
+
+  var raw = sheet.getDataRange().getValues();
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][0] === data.id) {
+      sheet.getRange(i + 1, 4).setValue(data.status || 'done');
+      sheet.getRange(i + 1, 5).setValue(data.result || '');
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Задача не найдена: ' + data.id };
 }

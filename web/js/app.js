@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ── CONSTANTS ──
-var API_ATELIE = 'https://script.google.com/macros/s/AKfycbwYYk5LU9uTxaPhJkt8X89mXpTlfZaR8dSQcw3SNZtIws1nYRlxy_MAGErMPmO4dY_b1g/exec';
+var API_ATELIE = 'https://script.google.com/macros/s/AKfycbxfN2eYhdWamLmTuR6I4unWFpNA4iOD5QxzaKWASZmW6G8El_FWk3vOi1wE7x4AUNasVA/exec';
 var CACHE_KEY = 'dresscode_v5_state';
 var CACHE_TTL = 5 * 60 * 1000;       // 5 мин для текущего месяца
 var CACHE_TTL_OLD = 60 * 60 * 1000;  // 1 час для прошлых месяцев

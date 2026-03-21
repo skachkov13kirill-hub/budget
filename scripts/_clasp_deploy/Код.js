@@ -8,6 +8,16 @@
 const ATELIE_SPREADSHEET_ID = '1cRdejpUv8gRyNTQVJPw16pp44FqmX6CZUSdUkWcUa40';  // Таблица "АТЕЛЬЕ 2026"
 const FAMILY_SPREADSHEET_ID = '13ZsaVLG_GJMWGvzOOyg17H8pss-eQGhu1X8yZ9nAVVg';  // Таблица семейного бюджета
 
+// ─── TELEGRAM УВЕДОМЛЕНИЯ ───
+const TG_BOT_TOKEN = '8013929400:AAHpjk1xy2WH1VHT9LwLxd3a5fMR3S4-aC0';
+const TG_CHAT_ID = '470830950';
+const BRANCH_FULL_NAMES = {
+  'М16': 'Менделеева 16', 'В8': 'Воронцовский 8', 'П14': 'Петровский 14',
+  'А6': 'Арсенальная 6', 'Г4': 'Графская 4', 'В22': 'Воронцовский 22',
+  'Е8': 'Екатерининский 8', 'В20': 'Воронцовский 20', 'Е17': 'Екатерининская 17',
+  'Г11': 'Графская 11'
+};
+
 // ═══════════════════════════════════════════════════════════════
 // РОУТЕР — ТОЧКА ВХОДА
 // ═══════════════════════════════════════════════════════════════
@@ -42,12 +52,18 @@ function doGet(e) {
         case 'getBalances':   result = handleGetBalances(); break;
         case 'getForecast':   result = handleGetForecast(); break;
 
-        // ─── ЕЖЕДНЕВНЫЙ ГРАФИК ───
-        case 'getDailyChart': result = handleGetDailyChart(e); break;
-
         // ─── ДДС / ЗАДАЧИ (бот v9) ───
         case 'getDDS':        result = handleGetDDS(e); break;
         case 'getTasks':      result = handleGetTasks(e); break;
+
+        // ─── БЛОКНОТ ФИЛИАЛОВ ───
+        case 'getBranchNotes': result = handleGetBranchNotes(e); break;
+
+        // ─── ОЧЕРЕДЬ АГЕНТОВ ───
+        case 'getQueue':      result = handleGetQueue(e); break;
+
+        // ─── ЕЖЕДНЕВНАЯ СВОДКА ───
+        case 'dailySummary':  result = sendDailySummary(); break;
 
         default:
           result = { success: false, error: 'Unknown action: ' + action };
@@ -112,6 +128,16 @@ function doPost(e) {
         case 'updateSetting':    result = handleUpdateSetting(data); break;
         case 'writeBranchDaily': result = writeBranchDaily(data); break;
         case 'uploadReportPhoto': result = handleUploadReportPhoto(data); break;
+
+        // ─── ОЧЕРЕДЬ АГЕНТОВ ───
+        case 'queueAgent':       result = handleQueueAgent(data); break;
+        case 'updateQueue':      result = handleUpdateQueue(data); break;
+
+        // ─── БЛОКНОТ ФИЛИАЛОВ ───
+        case 'addBranchNote':    result = handleAddBranchNote(data); break;
+        case 'updateBranchNote': result = handleUpdateBranchNote(data); break;
+        case 'deleteBranchNote': result = handleDeleteBranchNote(data); break;
+
         default:
           result = { success: false, error: 'Unknown POST action: ' + action };
       }
@@ -227,154 +253,6 @@ function matchBranchCode(text) {
   return null;
 }
 
-// ───────────────────────────────────────────────────────────────
-// Ежедневный график — последние N дней с разбивкой по филиалам
-// GET ?action=getDailyChart&days=14
-// ───────────────────────────────────────────────────────────────
-function handleGetDailyChart(e) {
-  var days = parseInt((e && e.parameter && e.parameter.days) || '14');
-  if (days > 31) days = 31;
-
-  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
-  var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
-  var filialNames = ['Менделеева 16', 'Воронцовский 8', 'Петровский 14',
-    'Арсенальная 6', 'Графская 4', 'Воронцовский 22',
-    'Екатерининский 8', 'Воронцовский 20', 'Екатерининская 17', 'Графская 11'];
-  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-
-  // Генерируем даты за последние N дней
-  var today = new Date();
-  var dateList = [];
-  for (var d = days - 1; d >= 0; d--) {
-    var dt = new Date(today.getTime() - d * 86400000);
-    var dd = dt.getDate();
-    var mm = dt.getMonth() + 1;
-    dateList.push({
-      label: (dd < 10 ? '0' : '') + dd + '.' + (mm < 10 ? '0' : '') + mm,
-      day: dd,
-      month: mm,
-      weekday: dt.getDay()  // 0=Вс, 1=Пн...
-    });
-  }
-
-  // Собираем месяцы, которые нужно читать
-  var months = {};
-  for (var i = 0; i < dateList.length; i++) months[dateList[i].month] = true;
-
-  // Читаем данные из каждого листа филиала
-  // branchData[code][dateLabel] = { atelie, clients, himchistka }
-  var branchData = {};
-  for (var b = 0; b < shortCodes.length; b++) {
-    var code = shortCodes[b];
-    var sheet = ss.getSheetByName(code);
-    branchData[code] = {};
-    if (!sheet) continue;
-
-    var data = sheet.getDataRange().getValues();
-    var dateCol = -1;
-    for (var col = 0; col < data[0].length; col++) {
-      if (String(data[0][col]).trim() === 'Дата') { dateCol = col; break; }
-    }
-    if (dateCol < 0) continue;
-
-    var atCol = dateCol + 1;
-    var klCol = dateCol + 2;
-    var hcCol = dateCol + 5;
-
-    // Проходим все месяцы
-    var inMonth = false;
-    var currentMonth = 0;
-    for (var r = 1; r < data.length; r++) {
-      var cell = data[r][dateCol];
-      var isDate = cell instanceof Date;
-      var cellStr = isDate ? '' : String(cell).trim();
-
-      // Заголовок месяца
-      if (!isDate && monthNames.indexOf(cellStr) > 0) {
-        currentMonth = monthNames.indexOf(cellStr);
-        inMonth = months[currentMonth] || false;
-        continue;
-      }
-
-      if (!inMonth) continue;
-
-      // Строка итогов "→" — конец месяца
-      if (!isDate && (cellStr.indexOf('>') >= 0 || cellStr === '→' || cellStr === '—>')) {
-        inMonth = false;
-        continue;
-      }
-
-      // Формируем метку DD.MM
-      var dateLabel = '';
-      if (isDate) {
-        var dd2 = cell.getDate();
-        var mm2 = cell.getMonth() + 1;
-        dateLabel = (dd2 < 10 ? '0' : '') + dd2 + '.' + (mm2 < 10 ? '0' : '') + mm2;
-      } else {
-        dateLabel = cellStr;
-      }
-
-      branchData[code][dateLabel] = {
-        atelie: parseFloat(data[r][atCol]) || 0,
-        clients: parseInt(data[r][klCol]) || 0,
-        himchistka: parseFloat(data[r][hcCol]) || 0
-      };
-    }
-  }
-
-  // Планы из листа "ПЛАН"
-  var currentMonth = today.getMonth() + 1;
-  var plansData = readPlansFromSheet(ss, currentMonth);
-  var daysInMonth = new Date(today.getFullYear(), currentMonth, 0).getDate();
-  var dailyPlanAtelie = Math.round(plansData.networkPlan.atelie / daysInMonth);
-  var dailyPlanClients = Math.round(plansData.networkPlan.clients / daysInMonth);
-
-  // Собираем результат по дням
-  var result = [];
-  for (var i = 0; i < dateList.length; i++) {
-    var dl = dateList[i];
-    var dayResult = {
-      date: dl.label,
-      weekday: dl.weekday,
-      atelie: 0,
-      clients: 0,
-      himchistka: 0,
-      total: 0,
-      branches: []
-    };
-
-    for (var b = 0; b < shortCodes.length; b++) {
-      var code = shortCodes[b];
-      var bd = branchData[code][dl.label] || { atelie: 0, clients: 0, himchistka: 0 };
-      dayResult.atelie += bd.atelie;
-      dayResult.clients += bd.clients;
-      dayResult.himchistka += bd.himchistka;
-      dayResult.branches.push({
-        code: code,
-        name: filialNames[b],
-        atelie: bd.atelie,
-        clients: bd.clients,
-        himchistka: bd.himchistka
-      });
-    }
-    dayResult.total = dayResult.atelie + dayResult.himchistka;
-    result.push(dayResult);
-  }
-
-  return {
-    success: true,
-    days: result,
-    plan: {
-      dailyAtelie: dailyPlanAtelie,
-      dailyClients: dailyPlanClients,
-      monthlyAtelie: plansData.networkPlan.atelie,
-      monthlyClients: plansData.networkPlan.clients,
-      daysInMonth: daysInMonth
-    }
-  };
-}
-
 // Читает лист "Общ" и возвращает данные всех филиалов за нужный месяц
 // Формат Общ: A=метки, B=Январь, C=Февраль, ... M=Декабрь
 // Секции: ОБЩ (общие), затем филиалы (Менд 16, Вор 8, ...)
@@ -386,8 +264,8 @@ function readBranchTotalsFromObsh(ss, month) {
   var data = sheet.getDataRange().getValues();
   if (data.length < 5) return null;
   
-  // Столбец месяца: B=годовой, C(2)=Янв, D(3)=Фев, E(4)=Март, ...
-  var monthCol = month + 1;
+  // Столбец месяца: B(1)=Янв, C(2)=Фев, ..., M(12)=Дек
+  var monthCol = month;
   
   var results = {};
   var currentSection = '_OVERALL';
@@ -453,51 +331,6 @@ function readBranchTotalsFromObsh(ss, month) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// Чтение планов из листа "ПЛАН"
-// Возвращает { branchPlans: { М16: {atelie, himchistka, clients, total}, ... },
-//              networkPlan: {atelie, himchistka, clients, total} }
-// ───────────────────────────────────────────────────────────────
-function readPlansFromSheet(ss, month) {
-  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-  var targetMonth = monthNames[month];
-  var sheet = ss.getSheetByName('ПЛАН');
-  var emptyPlan = { atelie: 0, himchistka: 0, clients: 0, total: 0 };
-  if (!sheet) return { branchPlans: {}, networkPlan: emptyPlan };
-
-  var data = sheet.getDataRange().getValues();
-  var branchPlans = {};
-  var networkPlan = { atelie: 0, himchistka: 0, clients: 0, total: 0 };
-
-  // Парсинг числа (может быть число или текст с пробелами "157 115")
-  function parseNum(raw) {
-    if (typeof raw === 'number') return raw;
-    return parseFloat(String(raw).replace(/\s/g, '').replace(',', '.')) || 0;
-  }
-
-  // Колонки: A=Филиал, B=Месяц, C=Ателье, D=Химчистка, E=Клиенты, F=Итого
-  for (var r = 1; r < data.length; r++) {
-    var branch = String(data[r][0]).trim();
-    var monthName = String(data[r][1]).trim();
-    if (monthName === targetMonth && branch) {
-      var plan = {
-        atelie: parseNum(data[r][2]),
-        himchistka: parseNum(data[r][3]),
-        clients: Math.round(parseNum(data[r][4])),
-        total: parseNum(data[r][5])
-      };
-      branchPlans[branch] = plan;
-      networkPlan.atelie += plan.atelie;
-      networkPlan.himchistka += plan.himchistka;
-      networkPlan.clients += plan.clients;
-      networkPlan.total += plan.total;
-    }
-  }
-
-  return { branchPlans: branchPlans, networkPlan: networkPlan };
-}
-
-// ───────────────────────────────────────────────────────────────
 // Чтение дневных данных из листа филиала за указанные даты
 // dates = массив строк 'DD.MM' (например ['12.03', '13.03'])
 // Возвращает { atelie, himchistka, clients, total } (сумму за эти дни)
@@ -520,7 +353,7 @@ function readBranchDailyForDates(sheet, month, dates) {
 
   var atCol = dateCol + 1;
   var klCol = dateCol + 2;
-  var hcCol = dateCol + 5;  // ХЧ оборот (G), пропуская Нал(+3) и Безнал(+4)
+  var hcCol = dateCol + 3;
   var inMonth = false;
 
   // Создаём Set из дат для быстрого поиска
@@ -628,10 +461,21 @@ function handleGetBranches(e) {
   ];
   var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
   
-  // Планы из листа "ПЛАН" (по филиалам)
-  var plansData = readPlansFromSheet(ss, month);
-  var branchPlans = plansData.branchPlans;
-  var networkPlan = plansData.networkPlan;
+  // Планы по месяцам (ВСЕГО по всем филиалам)
+  var monthlyPlans = {
+    1: { atelie: 1592613, himchistka: 174357 },
+    2: { atelie: 1608019, himchistka: 126123 },
+    3: { atelie: 2343701, himchistka: 225120 },
+    4: { atelie: 2334722, himchistka: 253457 },
+    5: { atelie: 2413353, himchistka: 197804 },
+    6: { atelie: 2419683, himchistka: 147015 },
+    7: { atelie: 1966955, himchistka: 116729 },
+    8: { atelie: 2167210, himchistka: 152989 },
+    9: { atelie: 2145655, himchistka: 176411 },
+    10: { atelie: 2223305, himchistka: 269383 },
+    11: { atelie: 2302015, himchistka: 246265 },
+    12: { atelie: 2304341, himchistka: 217977 }
+  };
   
   // ──── 1. Определяем режим: дата/период или месячный итог ────
   var useDailyMode = false;
@@ -680,10 +524,9 @@ function handleGetBranches(e) {
 
     var avgCheck = factClients > 0 ? Math.round(factAtelie / factClients) : 0;
 
-    var bp = branchPlans[code] || { atelie: 0, himchistka: 0, clients: 0, total: 0 };
-    var planAtelie = bp.atelie;
-    var planHimchistka = bp.himchistka;
-    var planTotal = bp.total || (planAtelie + planHimchistka);
+    var planAtelie = (monthlyPlans[month] ? monthlyPlans[month].atelie : 0) / shortCodes.length;
+    var planHimchistka = (monthlyPlans[month] ? monthlyPlans[month].himchistka : 0) / shortCodes.length;
+    var planTotal = planAtelie + planHimchistka;
 
     var filialObj = {
       name: name,
@@ -700,7 +543,6 @@ function handleGetBranches(e) {
       plan: {
         atelie: Math.round(planAtelie),
         himchistka: Math.round(planHimchistka),
-        clients: bp.clients || 0,
         total: Math.round(planTotal)
       },
       performance: {
@@ -735,32 +577,9 @@ function handleGetBranches(e) {
     totalFact.clients += factClients;
     totalFact.profit += factProfit;
   }
-
-  // ──── Fallback: если химчистка = 0 из "Общ", читаем из листов филиалов ────
-  if (!useDailyMode && totalFact.himchistka === 0) {
-    totalFact.himchistka = 0;
-    for (var fi = 0; fi < filials.length; fi++) {
-      var brSheet = ss.getSheetByName(shortCodes[fi]);
-      if (brSheet) {
-        var brData = parseBranchSheet(brSheet, month, monthNames, shortMonths);
-        var hc = brData.himchistka || 0;
-        filials[fi].fact.himchistka = hc;
-        filials[fi].fact.total = filials[fi].fact.atelie + hc;
-        filials[fi].fact.revenue = filials[fi].fact.total;
-        filials[fi].performance.himchistka = filials[fi].plan.himchistka > 0
-          ? Math.round(hc / filials[fi].plan.himchistka * 100) : 0;
-        totalFact.himchistka += hc;
-      }
-    }
-    totalFact.total = totalFact.atelie + totalFact.himchistka;
-  }
   
-  var totalPlan = {
-    atelie: networkPlan.atelie,
-    himchistka: networkPlan.himchistka,
-    clients: networkPlan.clients,
-    total: networkPlan.total || (networkPlan.atelie + networkPlan.himchistka)
-  };
+  var totalPlan = monthlyPlans[month] || { atelie: 0, himchistka: 0 };
+  totalPlan.total = totalPlan.atelie + totalPlan.himchistka;
   totalFact.avgCheck = totalFact.clients > 0 ? Math.round(totalFact.atelie / totalFact.clients) : 0;
   
   var overallPrev = obshTotals && obshTotals['_OVERALL'] ? obshTotals['_OVERALL'].prevYear : null;
@@ -859,7 +678,7 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
   if (dateCol >= 0) {
     var atCol = dateCol + 1;
     var klCol = dateCol + 2;
-    var hcCol = dateCol + 5;  // ХЧ оборот (G), пропуская Нал(+3) и Безнал(+4)
+    var hcCol = dateCol + 3;
     var inMonth = false;
     
     for (var r2 = 1; r2 < data.length; r2++) {
@@ -927,15 +746,6 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
     summary.himchistka = daily.reduce(function(s, d) { return s + d.himchistka; }, 0);
     summary.clients = daily.reduce(function(s, d) { return s + d.clients; }, 0);
     summary.revenue = summary.atelie + summary.himchistka;
-  }
-  
-  // ─── 4b. Fallback для химчистки: суммируем из дней если сводная = 0 ───
-  if (summary.himchistka === 0 && daily.length > 0) {
-    var hcFromDaily = daily.reduce(function(s, d) { return s + d.himchistka; }, 0);
-    if (hcFromDaily > 0) {
-      summary.himchistka = hcFromDaily;
-      summary.revenue = summary.atelie + summary.himchistka;
-    }
   }
   
   summary.daily = daily;
@@ -1818,10 +1628,6 @@ function writeBranchDaily(data) {
   var klCol   = dateCol + 2;  // Кл — клиенты
   var cashCol = dateCol + 3;  // Нал — наличные
   var cardCol = dateCol + 4;  // Безнал — безналичные
-  var hcAtCol   = dateCol + 5;  // хч оборот (G)
-  var hcKlCol   = dateCol + 6;  // Кл хч (H)
-  var hcCashCol = dateCol + 7;  // Нал хч (I)
-  var hcCardCol = dateCol + 8;  // Безнал хч (J)
 
   var inMonth = false;
   var targetRow = -1;
@@ -1867,17 +1673,12 @@ function writeBranchDaily(data) {
   sheet.getRange(targetRow, cashCol + 1).setValue(data.cash || 0);
   sheet.getRange(targetRow, cardCol + 1).setValue(data.card || 0);
 
-  // Химчистка (опционально)
-  if (data.hcAtelie != null)  sheet.getRange(targetRow, hcAtCol + 1).setValue(data.hcAtelie);
-  if (data.hcClients != null) sheet.getRange(targetRow, hcKlCol + 1).setValue(data.hcClients);
-  if (data.hcCash != null)    sheet.getRange(targetRow, hcCashCol + 1).setValue(data.hcCash);
-  if (data.hcCard != null)    sheet.getRange(targetRow, hcCardCol + 1).setValue(data.hcCard);
-
   Logger.log('writeBranchDaily: ' + data.branch + ' ' + data.date +
              ' atelie=' + data.atelie + ' clients=' + data.clients +
-             ' cash=' + (data.cash || 0) + ' card=' + (data.card || 0) +
-             ' hcAtelie=' + (data.hcAtelie || 0) + ' hcClients=' + (data.hcClients || 0) +
-             ' hcCash=' + (data.hcCash || 0) + ' hcCard=' + (data.hcCard || 0) + ' row=' + targetRow);
+             ' cash=' + (data.cash || 0) + ' card=' + (data.card || 0) + ' row=' + targetRow);
+
+  // Уведомление в Telegram
+  try { notifyBranchReport(data); } catch(tgErr) { Logger.log('TG notify error: ' + tgErr); }
 
   return {
     success: true,
@@ -1887,10 +1688,6 @@ function writeBranchDaily(data) {
     clients: data.clients,
     cash: data.cash || 0,
     card: data.card || 0,
-    hcAtelie: data.hcAtelie || 0,
-    hcClients: data.hcClients || 0,
-    hcCash: data.hcCash || 0,
-    hcCard: data.hcCard || 0,
     row: targetRow
   };
 }
@@ -2091,4 +1888,340 @@ function handleAddTask(data) {
 
   return { success: true, added: 1, task: data.task };
 }
- 
+
+// ═══════════════════════════════════════════════════════════════
+// БЛОКНОТ ФИЛИАЛОВ (лист "БЛОКНОТ" в АТЕЛЬЕ 2026)
+// Столбцы: id | branch | text | done | created | parent_id | sort_order
+// ═══════════════════════════════════════════════════════════════
+
+function _getBloknot() {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('БЛОКНОТ');
+  if (!sheet) {
+    sheet = ss.insertSheet('БЛОКНОТ');
+    sheet.appendRow(['id', 'branch', 'text', 'done', 'created', 'parent_id', 'sort_order']);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function _genId() {
+  return new Date().getTime().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function handleGetBranchNotes(e) {
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+  if (raw.length <= 1) return { success: true, data: [] };
+
+  var branch = (e && e.parameter && e.parameter.branch) || '';
+  var notes = [];
+
+  for (var i = 1; i < raw.length; i++) {
+    var row = raw[i];
+    if (!row[0]) continue;
+    if (branch && row[1] !== branch) continue;
+    notes.push({
+      id: row[0],
+      branch: row[1],
+      text: row[2],
+      done: row[3] === true || row[3] === 'TRUE' || row[3] === 1,
+      created: row[4] || '',
+      parent_id: row[5] || '',
+      sort_order: row[6] || 0
+    });
+  }
+
+  return { success: true, data: notes };
+}
+
+function handleAddBranchNote(data) {
+  var VALID_BRANCHES = ['М16','В8','П14','А6','Г4','В22','Ек8','В20','Ек17','Г11','ХЧ','other'];
+  if (!data.branch || !data.text) {
+    return { success: false, error: 'branch and text required' };
+  }
+  if (VALID_BRANCHES.indexOf(data.branch) === -1) {
+    return { success: false, error: 'Invalid branch: ' + data.branch };
+  }
+
+  var sheet = _getBloknot();
+  var id = _genId();
+  var now = new Date().toISOString();
+  var parentId = data.parent_id || '';
+
+  // Determine sort_order: max+1 for this branch (and parent_id)
+  var raw = sheet.getDataRange().getValues();
+  var maxSort = -1;
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][1] === data.branch && (raw[i][5] || '') === parentId) {
+      var s = parseInt(raw[i][6]) || 0;
+      if (s > maxSort) maxSort = s;
+    }
+  }
+
+  sheet.appendRow([id, data.branch, data.text, 'FALSE', now, parentId, maxSort + 1]);
+
+  return { success: true, id: id, branch: data.branch, text: data.text };
+}
+
+function handleUpdateBranchNote(data) {
+  if (!data.id) return { success: false, error: 'id required' };
+
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < raw.length; i++) {
+    if (String(raw[i][0]) === String(data.id)) {
+      if (data.done !== undefined) {
+        sheet.getRange(i + 1, 4).setValue((data.done === true || data.done === 'true') ? 'TRUE' : 'FALSE');
+      }
+      if (data.text !== undefined) {
+        sheet.getRange(i + 1, 3).setValue(data.text);
+      }
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Note not found: ' + data.id };
+}
+
+function handleDeleteBranchNote(data) {
+  if (!data.id) return { success: false, error: 'id required' };
+
+  var sheet = _getBloknot();
+  var raw = sheet.getDataRange().getValues();
+
+  // Delete note and its children (subtasks)
+  var idsToDelete = [String(data.id)];
+  // Find children
+  for (var i = 1; i < raw.length; i++) {
+    if (String(raw[i][5]) === String(data.id)) {
+      idsToDelete.push(String(raw[i][0]));
+    }
+  }
+
+  // Delete from bottom to top to preserve row indices
+  var rowsToDelete = [];
+  for (var i = 1; i < raw.length; i++) {
+    if (idsToDelete.indexOf(String(raw[i][0])) !== -1) {
+      rowsToDelete.push(i + 1);
+    }
+  }
+  rowsToDelete.sort(function(a, b) { return b - a; });
+  for (var j = 0; j < rowsToDelete.length; j++) {
+    sheet.deleteRow(rowsToDelete[j]);
+  }
+
+  return { success: true, deleted: rowsToDelete.length };
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TELEGRAM УВЕДОМЛЕНИЯ
+// ═══════════════════════════════════════════════════════════════
+
+function sendTelegram(text) {
+  var url = 'https://api.telegram.org/bot' + TG_BOT_TOKEN + '/sendMessage';
+  UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      chat_id: TG_CHAT_ID,
+      text: text,
+      parse_mode: 'HTML'
+    }),
+    muteHttpExceptions: true
+  });
+}
+
+function fmtMoney(n) {
+  if (!n) return '0';
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '₽';
+}
+
+function notifyBranchReport(data) {
+  var name = BRANCH_FULL_NAMES[data.branch] || data.branch;
+  var lines = [
+    '<b>' + name + '</b> — отчёт сдан ✓',
+    '',
+    'Оборот: ' + fmtMoney(data.atelie),
+    'Клиенты: ' + (data.clients || 0)
+  ];
+  if (data.hcAtelie && data.hcAtelie > 0) {
+    lines.push('Химчистка: ' + fmtMoney(data.hcAtelie));
+  }
+  sendTelegram(lines.join('\n'));
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ИТОГ ДНЯ — вызывается триггером в 23:59
+// Установить триггер: setupDailySummaryTrigger()
+// ═══════════════════════════════════════════════════════════════
+
+function setupDailySummaryTrigger() {
+  // Удалить старые триггеры этой функции
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sendDailySummary') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  // Новый триггер: каждый день в 23:50
+  ScriptApp.newTrigger('sendDailySummary')
+    .timeBased()
+    .everyDays(1)
+    .atHour(23)
+    .nearMinute(50)
+    .create();
+  Logger.log('Триггер sendDailySummary установлен на 23:50');
+}
+
+function sendDailySummary() {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var today = new Date();
+  var targetDay = today.getDate();
+  var targetMonth = today.getMonth() + 1;
+  var targetYear = today.getFullYear();
+
+  var monthNames = [
+    'Январь','Февраль','Март','Апрель','Май','Июнь',
+    'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'
+  ];
+  var targetMonthName = monthNames[targetMonth - 1];
+
+  var branches = ['М16','В8','П14','А6','Г4','В22','Е8','В20','Е17','Г11'];
+  var totalAtelie = 0;
+  var totalClients = 0;
+  var totalHC = 0;
+  var reported = [];
+  var notReported = [];
+
+  for (var b = 0; b < branches.length; b++) {
+    var code = branches[b];
+    var sheet = ss.getSheetByName(code);
+    if (!sheet) { notReported.push(code); continue; }
+
+    var values = sheet.getDataRange().getValues();
+    var headerRow = values[0];
+    var dateCol = -1;
+    for (var col = 0; col < headerRow.length; col++) {
+      if (String(headerRow[col]).trim() === 'Дата') { dateCol = col; break; }
+    }
+    if (dateCol < 0) { notReported.push(code); continue; }
+
+    var atCol = dateCol + 1;
+    var klCol = dateCol + 2;
+
+    var inMonth = false;
+    var found = false;
+
+    for (var r = 1; r < values.length; r++) {
+      var cell = values[r][dateCol];
+      var isDate = cell instanceof Date;
+      var cellStr = isDate ? '' : String(cell).trim();
+
+      if (!isDate && cellStr === targetMonthName) { inMonth = true; continue; }
+      if (inMonth) {
+        if (!isDate && (cellStr.indexOf('>') >= 0)) break;
+        if (!isDate && monthNames.indexOf(cellStr) >= 0 && cellStr !== targetMonthName) break;
+        if (isDate && cell.getFullYear() === targetYear && (cell.getMonth()+1) === targetMonth && cell.getDate() === targetDay) {
+          var atelie = values[r][atCol] || 0;
+          var clients = values[r][klCol] || 0;
+          if (atelie > 0) {
+            totalAtelie += atelie;
+            totalClients += clients;
+            reported.push(code);
+            found = true;
+          }
+          break;
+        }
+      }
+    }
+    if (!found) notReported.push(code);
+  }
+
+  var dayStr = targetDay + '.' + (targetMonth < 10 ? '0' : '') + targetMonth;
+  var lines = ['<b>Итоги дня — ' + dayStr + '</b>', ''];
+
+  lines.push('Оборот ателье: ' + fmtMoney(totalAtelie));
+  lines.push('Клиенты: ' + totalClients);
+
+  if (totalHC > 0) {
+    lines.push('Химчистка: ' + fmtMoney(totalHC));
+  }
+
+  lines.push('');
+  lines.push('Сдали: ' + reported.length + ' из ' + branches.length);
+
+  if (notReported.length > 0) {
+    var names = [];
+    for (var i = 0; i < notReported.length; i++) {
+      names.push(BRANCH_FULL_NAMES[notReported[i]] || notReported[i]);
+    }
+    lines.push('Не сдали: ' + names.join(', '));
+  }
+
+  sendTelegram(lines.join('\n'));
+  return { success: true, reported: reported.length, notReported: notReported.length };
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ОЧЕРЕДЬ АГЕНТОВ — запуск из дашборда
+// Лист "Очередь" в таблице АТЕЛЬЕ 2026
+// Столбцы: A=ID, B=Агент, C=Время, D=Статус (pending/done/error), E=Результат
+// ═══════════════════════════════════════════════════════════════
+
+function handleQueueAgent(data) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) {
+    sheet = ss.insertSheet('Очередь');
+    sheet.getRange(1, 1, 1, 5).setValues([['ID', 'Агент', 'Время', 'Статус', 'Результат']]);
+  }
+
+  var id = Utilities.getUuid().substring(0, 8);
+  var now = Utilities.formatDate(new Date(), 'Europe/Moscow', 'yyyy-MM-dd HH:mm:ss');
+  sheet.appendRow([id, data.agent, now, 'pending', '']);
+
+  sendTelegram('🤖 Агент <b>' + data.agent + '</b> добавлен в очередь\nВыполнится в следующем чате с Claude');
+
+  return { success: true, id: id, agent: data.agent, time: now };
+}
+
+function handleGetQueue(e) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) return { success: true, tasks: [] };
+
+  var raw = sheet.getDataRange().getValues();
+  var tasks = [];
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][3] === 'pending') {
+      tasks.push({
+        id: raw[i][0],
+        agent: raw[i][1],
+        time: raw[i][2],
+        status: raw[i][3]
+      });
+    }
+  }
+  return { success: true, tasks: tasks };
+}
+
+function handleUpdateQueue(data) {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('Очередь');
+  if (!sheet) return { success: false, error: 'Лист Очередь не найден' };
+
+  var raw = sheet.getDataRange().getValues();
+  for (var i = 1; i < raw.length; i++) {
+    if (raw[i][0] === data.id) {
+      sheet.getRange(i + 1, 4).setValue(data.status || 'done');
+      sheet.getRange(i + 1, 5).setValue(data.result || '');
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Задача не найдена: ' + data.id };
+}
