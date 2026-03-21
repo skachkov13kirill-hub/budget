@@ -39,8 +39,13 @@ function renderBizOverview(data) {
     document.getElementById('ov-himch-sub').textContent = '';
   }
 
-  // «На счетах» — калькулятор целевого баланса (900К к концу месяца)
-  var ACCOUNT_TARGET = 900000;
+  // «На счетах» — цель = аренда + кредиты (сколько нужно накопить к концу месяца)
+  var RENT_TOTAL = 419062; // сумма аренд по филиалам
+  var creditsTotal = 0;
+  if (state.credits) state.credits.forEach(function(cr) {
+    if (cr.status !== '\u0417\u0430\u043C\u043E\u0440\u043E\u0436\u0435\u043D') creditsTotal += (parseFloat(cr.payment) || 0);
+  });
+  var ACCOUNT_TARGET = RENT_TOTAL + creditsTotal;
   var TAILOR_SHARE = 0.5;    // 50% выручки уходит портным
   var PERSONAL_DAILY = 10000; // 10К/день личные расходы
   var totalWithHimch = (t.fact.atelie || 0) + (t.fact.himchistka || 0);
@@ -857,12 +862,13 @@ function openNetworkDetail(metricKey) {
   var daysLeft = isCurrentMonth ? daysInMonth - dayOfMonth : 0;
 
   var METRIC = {
-    atelie:   { title: '\u2702\uFE0F Ателье \u2014 сеть', color: '#6C5CE7' },
-    avgcheck: { title: '\uD83D\uDCB0 Средний чек \u2014 сеть', color: '#0984E3' },
-    total:    { title: '\uD83D\uDCCA Выручка итого', color: '#00B894' },
-    clients:  { title: '\uD83D\uDC65 Клиенты \u2014 сеть', color: '#E17055' },
-    profit:   { title: '\uD83D\uDCC8 Эффективность \u2014 сеть', color: '#FDCB6E' },
-    forecast: { title: '\uD83D\uDD2E Прогноз \u2014 сеть', color: '#A29BFE' }
+    atelie:      { title: '\u2702\uFE0F Ателье \u2014 сеть', color: '#6C5CE7' },
+    avgcheck:    { title: '\uD83D\uDCB0 Средний чек \u2014 сеть', color: '#0984E3' },
+    total:       { title: '\uD83D\uDCCA Выручка итого', color: '#00B894' },
+    clients:     { title: '\uD83D\uDC65 Клиенты \u2014 сеть', color: '#E17055' },
+    himchistka:  { title: '\uD83E\uDDF9 Химчистка \u2014 сеть', color: '#00CEC9' },
+    profit:      { title: '\uD83D\uDCC8 Эффективность \u2014 сеть', color: '#FDCB6E' },
+    forecast:    { title: '\uD83D\uDD2E Прогноз \u2014 сеть', color: '#A29BFE' }
   };
   var cfg = METRIC[metricKey]; if (!cfg) return;
 
@@ -901,6 +907,10 @@ function openNetworkDetail(metricKey) {
       r.revenue = f.fact.total || 0;
       r.marginPct = r.revenue > 0 ? Math.round(r.fact / r.revenue * 100) : 0;
       r.plan = 0; r.pct = 0;
+    } else if (metricKey === 'himchistka') {
+      r.fact = f.fact.himchistka || 0;
+      r.plan = f.plan.himchistka || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
     } else if (metricKey === 'atelie') {
       r.fact = f.fact.atelie || 0;
       r.plan = f.plan.atelie || 0;

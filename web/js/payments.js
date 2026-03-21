@@ -181,35 +181,29 @@ function renderPaymentsTab() {
     '</div>';
   });
 
-  // Fixed costs section — аренда, коммуналка, прочие
-  var s = state.settings || {};
-  var rentAll = parseFloat(s['\u0430\u0440\u0435\u043D\u0434\u0430_\u0432\u0441\u0435\u0433\u043E']) || 0;
-  var kommPerBranch = parseFloat(s['\u043A\u043E\u043C\u043C\u0443\u043D\u0430\u043B\u043A\u0430_\u0444\u0438\u043B\u0438\u0430\u043B']) || 0;
-  var otherPerBranch = parseFloat(s['\u043F\u0440\u043E\u0447\u0438\u0435_\u0444\u0438\u043B\u0438\u0430\u043B']) || 0;
-  var branchCount = (state.branches && state.branches.filials) ? state.branches.filials.length : 10;
-  var kommTotal = kommPerBranch * branchCount;
-  var otherTotal = otherPerBranch * branchCount;
-  var fixedTotal = rentAll + kommTotal + otherTotal;
-  if (fixedTotal > 0) {
-    html += '<div style="margin-top:16px;padding:12px 0 6px;border-top:2px solid #eee;">' +
-      '<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:8px;">\uD83C\uDFE0 \u041F\u043E\u0441\u0442\u043E\u044F\u043D\u043D\u044B\u0435 \u0440\u0430\u0441\u0445\u043E\u0434\u044B \u2014 ' + fmtShort(fixedTotal) + '</div>';
-    if (rentAll > 0) {
-      html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
-        '<span style="font-size:13px;color:#555;">\u0410\u0440\u0435\u043D\u0434\u0430 (' + branchCount + ' \u0444\u0438\u043B.)</span>' +
-        '<span style="font-size:13px;font-weight:600;">' + fmtShort(rentAll) + '</span></div>';
-    }
-    if (kommTotal > 0) {
-      html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
-        '<span style="font-size:13px;color:#555;">\u041A\u043E\u043C\u043C\u0443\u043D\u0430\u043B\u043A\u0430 (' + fmtShort(kommPerBranch) + ' \u00d7 ' + branchCount + ')</span>' +
-        '<span style="font-size:13px;font-weight:600;">' + fmtShort(kommTotal) + '</span></div>';
-    }
-    if (otherTotal > 0) {
-      html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
-        '<span style="font-size:13px;color:#555;">\u041F\u0440\u043E\u0447\u0438\u0435 (' + fmtShort(otherPerBranch) + ' \u00d7 ' + branchCount + ')</span>' +
-        '<span style="font-size:13px;font-weight:600;">' + fmtShort(otherTotal) + '</span></div>';
-    }
-    html += '</div>';
-  }
+  // Аренда по филиалам
+  var RENTS = [
+    {name: '\u041C\u0435\u043D\u0434\u0435\u043B\u0435\u0435\u0432\u0430 16', rent: 29500},
+    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 8', rent: 50000},
+    {name: '\u041F\u0435\u0442\u0440\u043E\u0432\u0441\u043A\u0438\u0439 14', rent: 80000},
+    {name: '\u0410\u0440\u0441\u0435\u043D\u0430\u043B\u044C\u043D\u0430\u044F 6', rent: 32562},
+    {name: '\u0410\u0440\u0441\u0435\u043D\u0430\u043B\u044C\u043D\u0430\u044F 6 \u0412\u044B\u0432\u0435\u0441\u043A\u0430', rent: 1500},
+    {name: '\u0413\u0440\u0430\u0444\u0441\u043A\u0430\u044F 11', rent: 25000},
+    {name: '\u0413\u0440\u0430\u0444\u0441\u043A\u0430\u044F 4', rent: 34000},
+    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 22', rent: 50000},
+    {name: '\u0415\u043A\u0430\u0442\u0435\u0440\u0438\u043D\u0438\u043D\u0441\u043A\u0430\u044F 8', rent: 45000},
+    {name: '\u0412\u043E\u0440\u043E\u043D\u0446\u043E\u0432\u0441\u043A\u0438\u0439 20', rent: 30000},
+    {name: '\u0415\u043A\u0430\u0442\u0435\u0440\u0438\u043D\u0438\u043D\u0441\u043A\u0430\u044F 17', rent: 41500}
+  ];
+  var rentTotal = RENTS.reduce(function(s, r) { return s + r.rent; }, 0);
+  html += '<div style="margin-top:16px;padding:12px 0 6px;border-top:2px solid #eee;">' +
+    '<div style="font-size:14px;font-weight:700;color:#333;margin-bottom:8px;">\uD83C\uDFE0 \u0410\u0440\u0435\u043D\u0434\u0430 \u2014 ' + fmtShort(rentTotal) + '</div>';
+  RENTS.forEach(function(r) {
+    html += '<div style="display:flex;justify-content:space-between;padding:6px 8px;background:#FAFAFA;border-radius:8px;margin-bottom:4px;">' +
+      '<span style="font-size:13px;color:#555;">' + r.name + '</span>' +
+      '<span style="font-size:13px;font-weight:600;">' + fmtShort(r.rent) + '</span></div>';
+  });
+  html += '</div>';
 
   // Extra income card
   html += '<div class="pay-card pay-card-income' + (extraReceived ? ' pay-card-done' : '') + '" onclick="toggleExtraIncome()">' +
