@@ -1,12 +1,16 @@
-const CACHE_NAME = 'dresscode-v12';
+const CACHE_NAME = 'dresscode-v19';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './css/app.css?v=12',
-  './js/app.js?v=12',
-  './js/business.js?v=12',
-  './js/payments.js?v=12',
-  './js/tasks.js?v=12',
+  './css/app.css?v=19',
+  './js/app.js?v=19',
+  './js/weather.js?v=2',
+  './js/business.js?v=18',
+  './js/payments.js?v=19',
+  './js/tasks.js?v=18',
+  './js/agents.js?v=1',
+  './js/daily.js?v=2',
+  './agents-config.json',
   './manifest.json'
 ];
 
@@ -19,7 +23,7 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => 
+    caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
     )
   );
@@ -35,7 +39,7 @@ self.addEventListener('fetch', event => {
     );
     return;
   }
-  
+
   // Cache first for static assets
   event.respondWith(
     caches.match(event.request).then(cached => {
@@ -44,7 +48,7 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
       }).catch(() => cached);
-      
+
       return cached || fetched;
     })
   );

@@ -1030,6 +1030,17 @@ body {
 .pay-card-done { opacity: 0.6; }
 .pay-card-overdue { border-left: 3px solid var(--red); }
 .pay-card-income { border-left: 3px solid var(--green); cursor: pointer; }
+.pay-section-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 4px 6px; margin-top: 8px;
+}
+.pay-section-title {
+  font-size: 14px; font-weight: 700; color: var(--text-1);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.pay-section-sum {
+  font-size: 13px; font-weight: 600; color: var(--text-3);
+}
 .pay-card-top {
   display: flex; align-items: center; gap: 12px;
 }
@@ -1085,6 +1096,66 @@ body {
 .pay-empty {
   text-align: center; padding: 60px 20px; color: var(--text-3);
 }
+
+/* ===== AGENTS TAB ===== */
+.ag-summary {
+  display: flex; justify-content: space-around;
+  background: var(--surface); border-radius: 16px;
+  padding: 16px 8px; margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.ag-summary-item { text-align: center; }
+.ag-summary-num { display: block; font-size: 24px; font-weight: 800; color: var(--text); }
+.ag-summary-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.ag-num-green { color: var(--green); }
+.ag-num-blue { color: var(--primary); }
+
+.ag-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 4px 6px; margin-top: 4px;
+}
+.ag-group-icon { font-size: 18px; }
+.ag-group-name { font-size: 14px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+.ag-group-count {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  background: var(--surface-2); border-radius: 10px; padding: 2px 8px;
+}
+
+.ag-card {
+  background: var(--surface); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: opacity 0.2s;
+}
+.ag-card-frozen { opacity: 0.5; }
+.ag-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.ag-card-left { flex: 1; }
+.ag-card-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.ag-card-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.ag-card-desc { font-size: 12px; color: var(--text-2); margin-top: 8px; line-height: 1.4; }
+
+.ag-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.ag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ag-dot-green { background: var(--green); }
+.ag-dot-blue { background: var(--primary); }
+.ag-dot-yellow { background: var(--orange); }
+.ag-dot-gray { background: #ccc; }
+.ag-dot-red { background: var(--red); }
+
+.ag-radars { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.ag-radar-badge {
+  font-size: 10px; color: var(--primary); background: var(--primary-glow);
+  border-radius: 8px; padding: 2px 8px; font-weight: 600;
+}
+
+.ag-card-action { margin-top: 10px; }
+.ag-action-btn {
+  width: 100%; padding: 8px; border: none; border-radius: 10px;
+  background: var(--primary-glow); color: var(--primary);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s;
+}
+.ag-action-btn:active { background: rgba(91,79,232,0.28); }
 
 /* ===== TASKS TAB ===== */
 .tasks-header {

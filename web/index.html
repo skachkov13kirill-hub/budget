@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=18">
+<link rel="stylesheet" href="css/app.css?v=19">
 <title>DressCode · Дашборд</title>
 </head>
 <body>
@@ -33,6 +33,9 @@
   </button>
   <button class="nav-btn" onclick="switchTab('tasks',this)" id="nav-tasks">
     <span class="nav-icon">&#x2705;</span>Задачи
+  </button>
+  <button class="nav-btn" onclick="switchTab('agents',this)" id="nav-agents">
+    <span class="nav-icon">&#x1F916;</span>Агенты
   </button>
 </nav>
 
@@ -103,6 +106,16 @@
   </div>
   <div class="payments-summary" id="paymentsSummary"></div>
   <div id="paymentsContent">
+    <div class="loading-box"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- TAB: АГЕНТЫ -->
+<div class="main-tab" id="tab-agents">
+  <div class="payments-header">
+    <span>&#x1F916; Агенты</span>
+  </div>
+  <div id="agentsContent">
     <div class="loading-box"><div class="spinner"></div></div>
   </div>
 </div>
@@ -196,9 +209,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=18"></script>
+<script src="js/app.js?v=19"></script>
 <script src="js/weather.js?v=2"></script>
-<script src="js/payments.js?v=18"></script>
+<script src="js/payments.js?v=19"></script>
+<script src="js/agents.js?v=1"></script>
 <script src="js/tasks.js?v=18"></script>
 <script src="js/business.js?v=18"></script>
 <script src="js/daily.js?v=2"></script>

@@ -109,6 +109,7 @@ function renderAll() {
     if (typeof renderFilials === 'function') renderFilials(state.branches);
   }
   if (typeof renderPaymentsTab === 'function') renderPaymentsTab();
+  if (typeof renderAgentsTab === 'function') renderAgentsTab();
 
   // Disable future months in biz selector
   if (typeof bizEnforceDateLimits === 'function') bizEnforceDateLimits();

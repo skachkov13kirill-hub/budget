@@ -1,0 +1,190 @@
+{
+  "groups": [
+    {
+      "name": "Операционка",
+      "icon": "&#x2699;&#xFE0F;",
+      "agents": [
+        {
+          "id": "bot_v9",
+          "name": "bot_v9",
+          "subtitle": "@atelie_finance_bot",
+          "description": "Принимает выручку от 17 портных в Telegram, пишет в Google Sheets",
+          "status": "active",
+          "action": null,
+          "radar": null
+        },
+        {
+          "id": "dresscode_assistant",
+          "name": "Ассистент",
+          "subtitle": "@dresscode_assistant_bot",
+          "description": "AI-помощник — отвечает на вопросы по бизнесу, управляет задачами",
+          "status": "frozen",
+          "action": null,
+          "radar": null
+        }
+      ]
+    },
+    {
+      "name": "VK-маркетинг",
+      "icon": "&#x1F4E2;",
+      "agents": [
+        {
+          "id": "vk_content",
+          "name": "VK Контент",
+          "subtitle": "content.py",
+          "description": "Генерирует посты для VK-группы и публикует",
+          "status": "ready",
+          "action": "Сгенерировать пост",
+          "radar": "vk_content_radar"
+        },
+        {
+          "id": "vk_bot",
+          "name": "VK Бот",
+          "subtitle": "bot.py",
+          "description": "Отвечает клиентам в VK-сообщениях 24/7, закрывает на звонок",
+          "status": "ready",
+          "action": null,
+          "radar": "vk_content_radar"
+        },
+        {
+          "id": "vk_scout",
+          "name": "VK Разведчик",
+          "subtitle": "scout.py",
+          "description": "Мониторит конкурентов в VK — посты, акции, цены",
+          "status": "ready",
+          "action": "Проверить конкурентов",
+          "radar": "vk_content_radar"
+        },
+        {
+          "id": "vk_analyst",
+          "name": "VK Аналитик",
+          "subtitle": "analyst.py",
+          "description": "Анализирует какие посты зашли, какие нет. Самообучение",
+          "status": "ready",
+          "action": "Анализ за неделю",
+          "radar": "vk_target_radar"
+        },
+        {
+          "id": "vk_target",
+          "name": "VK Таргет",
+          "subtitle": "target.py",
+          "description": "Генерирует рекламные объявления. После VK Ads API — запускает кампании",
+          "status": "waiting",
+          "action": "Сгенерировать рекламу",
+          "radar": "vk_target_radar"
+        },
+        {
+          "id": "vk_strategist",
+          "name": "VK Стратег",
+          "subtitle": "strategist.py",
+          "description": "Собирает данные от всех VK-агентов, формирует фокус недели",
+          "status": "ready",
+          "action": "Недельный отчёт",
+          "radar": "vk_content_radar,vk_target_radar"
+        }
+      ]
+    },
+    {
+      "name": "Яндекс.Карты + 2ГИС",
+      "icon": "&#x1F4CD;",
+      "agents": [
+        {
+          "id": "review_manager",
+          "name": "Менеджер отзывов",
+          "subtitle": "@review-manager",
+          "description": "Находит новые отзывы на Яндексе и 2ГИС, пишет ответы",
+          "status": "ready",
+          "action": "Проверить отзывы",
+          "radar": "maps_radar"
+        },
+        {
+          "id": "content_strategist",
+          "name": "Контент-стратег",
+          "subtitle": "@content-strategist",
+          "description": "Решает какой контент нужен для карточек, формирует план",
+          "status": "ready",
+          "action": "Контент-план",
+          "radar": "vk_content_radar,claude_radar"
+        },
+        {
+          "id": "content_producer",
+          "name": "Контент-продюсер",
+          "subtitle": "@content-producer",
+          "description": "Создаёт текст + картинки, публикует на Яндекс Бизнес и 2ГИС",
+          "status": "ready",
+          "action": "Создать пост",
+          "radar": "claude_radar"
+        },
+        {
+          "id": "promo_strategist",
+          "name": "Стратег продвижения",
+          "subtitle": "@promo-strategist",
+          "description": "Продвижение карточек на картах, оптимизация видимости",
+          "status": "ready",
+          "action": "План продвижения",
+          "radar": "maps_radar"
+        },
+        {
+          "id": "card_admin",
+          "name": "Админ карточек",
+          "subtitle": "@card-admin",
+          "description": "Проверяет карточки: часы, телефоны, фото, верификация каждые 90 дней",
+          "status": "ready",
+          "action": "Аудит карточек",
+          "radar": "maps_radar"
+        },
+        {
+          "id": "analytics_agent",
+          "name": "Аналитик карт",
+          "subtitle": "@analytics-agent",
+          "description": "Собирает метрики из Яндекс Бизнес, 2ГИС, Яндекс Метрики",
+          "status": "ready",
+          "action": "Отчёт за неделю",
+          "radar": "maps_radar"
+        }
+      ]
+    },
+    {
+      "name": "Радары",
+      "icon": "&#x1F4E1;",
+      "agents": [
+        {
+          "id": "vk_content_radar",
+          "name": "VK Контент-радар",
+          "subtitle": "/vk-content-radar",
+          "description": "Ищет фишки контента VK на YouTube и других источниках",
+          "status": "active",
+          "action": "Запустить радар",
+          "radar": null
+        },
+        {
+          "id": "vk_target_radar",
+          "name": "VK Таргет-радар",
+          "subtitle": "/vk-target-radar",
+          "description": "Ищет фишки рекламы VK на YouTube и других источниках",
+          "status": "active",
+          "action": "Запустить радар",
+          "radar": null
+        },
+        {
+          "id": "claude_radar",
+          "name": "Claude-радар",
+          "subtitle": "/claude-radar",
+          "description": "Ищет фишки Claude AI для бизнеса",
+          "status": "active",
+          "action": "Запустить радар",
+          "radar": null
+        },
+        {
+          "id": "maps_radar",
+          "name": "Карты-радар",
+          "subtitle": "/maps-radar",
+          "description": "Ищет фишки Яндекс.Карт, 2ГИС, локального SEO",
+          "status": "active",
+          "action": "Запустить радар",
+          "radar": null
+        }
+      ]
+    }
+  ]
+}
