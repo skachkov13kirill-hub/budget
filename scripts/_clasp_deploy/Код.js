@@ -52,6 +52,9 @@ function doGet(e) {
         case 'getBalances':   result = handleGetBalances(); break;
         case 'getForecast':   result = handleGetForecast(); break;
 
+        // ─── ДНЕВНОЙ ГРАФИК ───
+        case 'getDailyChart': result = handleGetDailyChart(e); break;
+
         // ─── ДДС / ЗАДАЧИ (бот v9) ───
         case 'getDDS':        result = handleGetDDS(e); break;
         case 'getTasks':      result = handleGetTasks(e); break;
@@ -233,6 +236,59 @@ function handleGetAll(e) {
 // Оптимизировано: читает из листа "Общ" (1 запрос вместо 9)
 // Детализация по дням — из отдельного листа филиала по запросу
 // ═══════════════════════════════════════════════════════════════
+// Чтение планов из Google Sheets (если листы существуют)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Читает лист "ПЛАН" — суммарные планы по месяцам (ателье + химчистка)
+ * Формат: A=Месяц | B=Ателье | C=Химчистка
+ */
+function readPlansFromSheet(ss) {
+  try {
+    var sheet = ss.getSheetByName('ПЛАН');
+    if (!sheet) return null;
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return null;
+    var plans = {};
+    for (var i = 1; i < data.length; i++) {
+      var m = parseInt(data[i][0]);
+      if (m >= 1 && m <= 12) {
+        var ate = parseFloat(String(data[i][1]).replace(/\s/g, '')) || 0;
+        var hc = parseFloat(String(data[i][2]).replace(/\s/g, '')) || 0;
+        plans[m] = { atelie: ate, himchistka: hc };
+      }
+    }
+    var hasData = false;
+    for (var k in plans) { if (plans[k].atelie > 0) { hasData = true; break; } }
+    return hasData ? plans : null;
+  } catch(e) { return null; }
+}
+
+/**
+ * Читает лист "ПЛАН ПО ФИЛИАЛАМ" — индивидуальные планы
+ * Формат: A=Код | B=Месяц | C=Ателье | D=Химчистка
+ */
+function readBranchPlansFromSheet(ss) {
+  try {
+    var sheet = ss.getSheetByName('ПЛАН ПО ФИЛИАЛАМ');
+    if (!sheet) return null;
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return null;
+    var plans = {};
+    for (var i = 1; i < data.length; i++) {
+      var code = String(data[i][0]).trim();
+      var m = parseInt(data[i][1]);
+      if (!code || !m || m < 1 || m > 12) continue;
+      var ate = parseFloat(String(data[i][2]).replace(/\s/g, '')) || 0;
+      var hc = parseFloat(String(data[i][3]).replace(/\s/g, '')) || 0;
+      if (!plans[code]) plans[code] = {};
+      plans[code][m] = { atelie: ate, himchistka: hc };
+    }
+    var hasData = false;
+    for (var k in plans) { hasData = true; break; }
+    return hasData ? plans : null;
+  } catch(e) { return null; }
+}
 
 // Определяет код филиала по тексту в ячейке листа "Общ"
 function matchBranchCode(text) {
@@ -344,16 +400,20 @@ function readBranchDailyForDates(sheet, month, dates) {
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) return result;
 
-  // Находим столбец "Дата"
-  var dateCol = -1;
+  // Находим столбцы по заголовкам
+  var dateCol = -1, atCol = -1, klCol = -1, hcCol = -1;
   for (var col = 0; col < data[0].length; col++) {
-    if (String(data[0][col]).trim() === 'Дата') { dateCol = col; break; }
+    var h = String(data[0][col]).trim().toLowerCase();
+    if (h === 'дата') dateCol = col;
+    else if (h === 'ат' || h === 'ателье') atCol = col;
+    else if (h === 'кл' || h === 'клиенты') klCol = col;
+    else if (h === 'хч' || h === 'химчистка' || h.indexOf('хим') >= 0) hcCol = col;
   }
   if (dateCol < 0) return result;
-
-  var atCol = dateCol + 1;
-  var klCol = dateCol + 2;
-  var hcCol = dateCol + 3;
+  // Fallback
+  if (atCol < 0) atCol = dateCol + 1;
+  if (klCol < 0) klCol = dateCol + 2;
+  if (hcCol < 0) hcCol = 6; // столбец G
   var inMonth = false;
 
   // Создаём Set из дат для быстрого поиска
@@ -461,8 +521,8 @@ function handleGetBranches(e) {
   ];
   var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
   
-  // Планы по месяцам (ВСЕГО по всем филиалам)
-  var monthlyPlans = {
+  // Планы: сначала из листа "ПЛАН" (приоритет), потом hardcoded fallback
+  var monthlyPlans = readPlansFromSheet(ss) || {
     1: { atelie: 1592613, himchistka: 174357 },
     2: { atelie: 1608019, himchistka: 126123 },
     3: { atelie: 2343701, himchistka: 225120 },
@@ -476,6 +536,8 @@ function handleGetBranches(e) {
     11: { atelie: 2302015, himchistka: 246265 },
     12: { atelie: 2304341, himchistka: 217977 }
   };
+  // Индивидуальные планы филиалов (если есть лист "ПЛАН ПО ФИЛИАЛАМ")
+  var branchPlans = readBranchPlansFromSheet(ss);
   
   // ──── 1. Определяем режим: дата/период или месячный итог ────
   var useDailyMode = false;
@@ -513,19 +575,34 @@ function handleGetBranches(e) {
       factTotal = dayData.total;
       factProfit = 0;  // прибыль недоступна на дневном уровне
     } else {
-      // ──── MONTHLY MODE: как раньше — из листа "Общ" ────
+      // ──── MONTHLY MODE: ателье/клиенты/прибыль из "Общ", химчистка из столбца G листа филиала ────
       var d = obshTotals ? (obshTotals[code] || null) : null;
       factAtelie = d ? d.atelie : 0;
-      factHimchistka = d ? d.himchistka : 0;
       factClients = d ? d.clients : 0;
-      factTotal = d ? (d.total || (factAtelie + factHimchistka)) : 0;
       factProfit = d ? d.profit : 0;
+
+      // Химчистка — сумма ежедневных значений из столбца G каждого филиала
+      var branchSheet = ss.getSheetByName(code);
+      if (branchSheet) {
+        var branchData = parseBranchSheet(branchSheet, month, monthNames, shortMonths);
+        if (branchData.daily && branchData.daily.length > 0) {
+          factHimchistka = branchData.daily.reduce(function(s, day) { return s + (day.himchistka || 0); }, 0);
+        } else {
+          factHimchistka = branchData.himchistka || 0;
+        }
+      } else {
+        factHimchistka = d ? d.himchistka : 0;
+      }
+
+      factTotal = factAtelie + factHimchistka;
     }
 
     var avgCheck = factClients > 0 ? Math.round(factAtelie / factClients) : 0;
 
-    var planAtelie = (monthlyPlans[month] ? monthlyPlans[month].atelie : 0) / shortCodes.length;
-    var planHimchistka = (monthlyPlans[month] ? monthlyPlans[month].himchistka : 0) / shortCodes.length;
+    // Индивидуальный план филиала (если есть) или равномерное распределение
+    var bp = branchPlans && branchPlans[code] && branchPlans[code][month];
+    var planAtelie = bp ? bp.atelie : (monthlyPlans[month] ? monthlyPlans[month].atelie : 0) / shortCodes.length;
+    var planHimchistka = bp ? bp.himchistka : (monthlyPlans[month] ? monthlyPlans[month].himchistka : 0) / shortCodes.length;
     var planTotal = planAtelie + planHimchistka;
 
     var filialObj = {
@@ -628,11 +705,16 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
   
   // ─── 1. Находим ключевые столбцы ───
   var dateCol = -1, monthCol = -1, labelCol = -1;
-  
+  var dailyAtCol = -1, dailyKlCol = -1, dailyHcCol = -1;
+
   for (var col = 0; col < headerRow.length; col++) {
     var h = String(headerRow[col]).trim();
+    var hLow = h.toLowerCase();
     if (h === 'Дата') dateCol = col;
     if (h === shortMonths[month]) monthCol = col;
+    if (hLow === 'ат' || hLow === 'ателье') dailyAtCol = col;
+    if (hLow === 'кл' || hLow === 'клиенты') dailyKlCol = col;
+    if (hLow === 'хч' || hLow === 'химчистка' || hLow.indexOf('хим') >= 0) dailyHcCol = col;
   }
   
   // Ищем столбец с метками сводной таблицы ("Выручка", "Ателье", ...)
@@ -676,9 +758,9 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
   var arrowTotals = null;
   
   if (dateCol >= 0) {
-    var atCol = dateCol + 1;
-    var klCol = dateCol + 2;
-    var hcCol = dateCol + 3;
+    var atCol = dailyAtCol >= 0 ? dailyAtCol : dateCol + 1;
+    var klCol = dailyKlCol >= 0 ? dailyKlCol : dateCol + 2;
+    var hcCol = dailyHcCol >= 0 ? dailyHcCol : 6; // столбец G = индекс 6
     var inMonth = false;
     
     for (var r2 = 1; r2 < data.length; r2++) {
@@ -710,7 +792,7 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
         var at = parseFloat(data[r2][atCol]) || 0;
         var kl = parseInt(data[r2][klCol]) || 0;
         var hc = parseFloat(data[r2][hcCol]) || 0;
-        
+
         if (at > 0 || kl > 0 || hc > 0) {
           var dateLabel = '';
           if (isDate) {
@@ -2224,4 +2306,113 @@ function handleUpdateQueue(data) {
     }
   }
   return { success: false, error: 'Задача не найдена: ' + data.id };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ДНЕВНОЙ ГРАФИК — GET ?action=getDailyChart&days=14
+// ═══════════════════════════════════════════════════════════════
+function handleGetDailyChart(e) {
+  var days = parseInt((e && e.parameter && e.parameter.days) || '14');
+  if (days > 31) days = 31;
+
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var shortCodes = ['М16', 'В8', 'П14', 'А6', 'Г4', 'В22', 'Е8', 'В20', 'Е17', 'Г11'];
+  var filialNames = ['Менделеева 16', 'Воронцовский 8', 'Петровский 14',
+    'Арсенальная 6', 'Графская 4', 'Воронцовский 22',
+    'Екатерининский 8', 'Воронцовский 20', 'Екатерининская 17', 'Графская 11'];
+  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+  var today = new Date();
+  var dateList = [];
+  for (var d = days - 1; d >= 0; d--) {
+    var dt = new Date(today.getTime() - d * 86400000);
+    var dd = dt.getDate();
+    var mm = dt.getMonth() + 1;
+    dateList.push({
+      label: (dd < 10 ? '0' : '') + dd + '.' + (mm < 10 ? '0' : '') + mm,
+      day: dd,
+      month: mm,
+      weekday: dt.getDay()
+    });
+  }
+
+  var months = {};
+  for (var i = 0; i < dateList.length; i++) months[dateList[i].month] = true;
+
+  var branchData = {};
+  for (var b = 0; b < shortCodes.length; b++) {
+    var code = shortCodes[b];
+    var sheet = ss.getSheetByName(code);
+    branchData[code] = {};
+    if (!sheet) continue;
+
+    var data = sheet.getDataRange().getValues();
+    // Умный поиск столбцов по заголовкам
+    var dateCol = -1, atCol = -1, klCol = -1, hcCol = -1;
+    for (var col = 0; col < data[0].length; col++) {
+      var h = String(data[0][col]).trim().toLowerCase();
+      if (h === 'дата') dateCol = col;
+      else if (h === 'ат' || h === 'ателье') atCol = col;
+      else if (h === 'кл' || h === 'клиенты') klCol = col;
+      else if (h === 'хч' || h === 'химчистка' || h.indexOf('хим') >= 0) hcCol = col;
+    }
+    if (dateCol < 0) continue;
+    if (atCol < 0) atCol = dateCol + 1;
+    if (klCol < 0) klCol = dateCol + 2;
+    if (hcCol < 0) hcCol = 6;
+
+    var inMonth = false;
+    var currentMonth = 0;
+    for (var r = 1; r < data.length; r++) {
+      var cell = data[r][dateCol];
+      var isDate = cell instanceof Date;
+      var cellStr = isDate ? '' : String(cell).trim();
+
+      if (!isDate && monthNames.indexOf(cellStr) > 0) {
+        currentMonth = monthNames.indexOf(cellStr);
+        inMonth = months[currentMonth] || false;
+        continue;
+      }
+      if (!inMonth) continue;
+      if (!isDate && (cellStr.indexOf('>') >= 0 || cellStr === '→' || cellStr === '—>')) {
+        inMonth = false;
+        continue;
+      }
+
+      var dateLabel = '';
+      if (isDate) {
+        var dd2 = cell.getDate();
+        var mm2 = cell.getMonth() + 1;
+        dateLabel = (dd2 < 10 ? '0' : '') + dd2 + '.' + (mm2 < 10 ? '0' : '') + mm2;
+      } else {
+        dateLabel = cellStr;
+      }
+
+      branchData[code][dateLabel] = {
+        atelie: parseFloat(data[r][atCol]) || 0,
+        clients: parseInt(data[r][klCol]) || 0,
+        himchistka: parseFloat(data[r][hcCol]) || 0
+      };
+    }
+  }
+
+  var result = [];
+  for (var i = 0; i < dateList.length; i++) {
+    var dl = dateList[i];
+    var dayResult = { date: dl.label, weekday: dl.weekday, atelie: 0, clients: 0, himchistka: 0, total: 0, branches: [] };
+
+    for (var b = 0; b < shortCodes.length; b++) {
+      var code = shortCodes[b];
+      var bd = branchData[code][dl.label] || { atelie: 0, clients: 0, himchistka: 0 };
+      dayResult.atelie += bd.atelie;
+      dayResult.clients += bd.clients;
+      dayResult.himchistka += bd.himchistka;
+      dayResult.branches.push({ code: code, name: filialNames[b], atelie: bd.atelie, clients: bd.clients, himchistka: bd.himchistka });
+    }
+    dayResult.total = dayResult.atelie + dayResult.himchistka;
+    result.push(dayResult);
+  }
+
+  return { success: true, days: result };
 }
