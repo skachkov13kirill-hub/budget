@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // PAYMENTS.JS — Вкладка "Платежи" DressCode Dashboard
 // Два блока: Кредиты + Аренда, чек-лист с выбором способа оплаты
+// Данные хранятся в Google Sheets (лист ПЛАТЕЖИ) + localStorage как кэш
 // ═══════════════════════════════════════════════════════════════
 
 var EXTRA_INCOME = 100000;
@@ -28,10 +29,18 @@ var RENT_ITEMS = [
   { name: 'Г11 (Графская 11)', amount: 27000, day: 28 }
 ];
 
-// ── STORAGE ──
+// ── STORAGE (localStorage как кэш, Sheets как источник правды) ──
+var _paymentsLoaded = false;
+var _paymentsSaving = false;
+
 function getPaymentsKey(prefix) {
   var now = new Date();
   return (prefix || 'dresscode_payments') + '_' + now.getFullYear() + '-' + (now.getMonth() + 1);
+}
+
+function getCurrentYearMonth() {
+  var now = new Date();
+  return now.getFullYear() + '-' + (now.getMonth() + 1);
 }
 
 function getPaymentsData(prefix) {
@@ -42,12 +51,77 @@ function savePaymentsData(data, prefix) {
   localStorage.setItem(getPaymentsKey(prefix), JSON.stringify(data));
 }
 
+// ── SYNC WITH GOOGLE SHEETS ──
+function loadPaymentsFromSheets() {
+  if (_paymentsLoaded || typeof API_ATELIE === 'undefined') return;
+  var url = API_ATELIE + '?action=getPaymentsStatus&month=' + encodeURIComponent(getCurrentYearMonth());
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+      if (!resp.success) return;
+      _paymentsLoaded = true;
+      // Записываем данные из Sheets в localStorage (как кэш)
+      if (resp.credits && Object.keys(resp.credits).length > 0) {
+        savePaymentsData(resp.credits, 'dresscode_payments');
+      }
+      if (resp.rent && Object.keys(resp.rent).length > 0) {
+        savePaymentsData(resp.rent, 'dresscode_rent');
+      }
+      if (resp.subrent && Object.keys(resp.subrent).length > 0) {
+        savePaymentsData(resp.subrent, 'dresscode_subrent');
+      }
+      if (resp.extraIncome !== undefined) {
+        localStorage.setItem(getExtraIncomeKey(), resp.extraIncome ? '1' : '0');
+      }
+      renderPaymentsTab();
+    })
+    .catch(function(err) {
+      console.warn('Payments sync failed, using localStorage:', err);
+    });
+}
+
+function savePaymentsToSheets() {
+  if (_paymentsSaving || typeof API_ATELIE === 'undefined') return;
+  _paymentsSaving = true;
+  var payload = {
+    month: getCurrentYearMonth(),
+    credits: getPaymentsData('dresscode_payments'),
+    rent: getPaymentsData('dresscode_rent'),
+    subrent: getPaymentsData('dresscode_subrent'),
+    extraIncome: isExtraIncomeReceived()
+  };
+
+  fetch(API_ATELIE + '?action=savePaymentsStatus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload),
+    redirect: 'follow'
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(resp) {
+    _paymentsSaving = false;
+    if (resp.success) console.log('Payments saved to Sheets');
+  })
+  .catch(function(err) {
+    _paymentsSaving = false;
+    console.warn('Payments save failed:', err);
+  });
+}
+
+// Дебаунс — не сохранять при каждом клике, а через 1 сек после последнего
+var _saveTimer = null;
+function debounceSaveToSheets() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(savePaymentsToSheets, 1000);
+}
+
 // ── TOGGLE PAYMENT ──
 function togglePayment(idx, method) {
   var data = getPaymentsData('dresscode_payments');
   if (data[idx] === method) { delete data[idx]; }
   else { data[idx] = method; }
   savePaymentsData(data, 'dresscode_payments');
+  debounceSaveToSheets();
   renderPaymentsTab();
 }
 
@@ -56,6 +130,7 @@ function toggleRentPayment(idx, method) {
   if (data[idx] === method) { delete data[idx]; }
   else { data[idx] = method; }
   savePaymentsData(data, 'dresscode_rent');
+  debounceSaveToSheets();
   renderPaymentsTab();
 }
 
@@ -64,6 +139,7 @@ function toggleSubrentPayment(idx, method) {
   if (data[idx] === method) { delete data[idx]; }
   else { data[idx] = method; }
   savePaymentsData(data, 'dresscode_subrent');
+  debounceSaveToSheets();
   renderPaymentsTab();
 }
 
@@ -82,6 +158,7 @@ function toggleExtraIncome() {
   var key = getExtraIncomeKey();
   var current = isExtraIncomeReceived();
   localStorage.setItem(key, current ? '0' : '1');
+  debounceSaveToSheets();
   renderPaymentsTab();
   if (typeof renderPlanner === 'function' && state.branches) renderPlanner(state.branches);
 }
@@ -179,6 +256,9 @@ function renderPaymentsTab() {
   var summaryEl = document.getElementById('paymentsSummary');
   var monthEl = document.getElementById('paymentsMonthName');
   if (!el) return;
+
+  // Загружаем данные из Sheets при первом рендере
+  if (!_paymentsLoaded) loadPaymentsFromSheets();
 
   var now = new Date();
   var cm = now.getMonth() + 1;
