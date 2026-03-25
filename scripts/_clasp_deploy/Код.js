@@ -59,6 +59,9 @@ function doGet(e) {
         case 'getDDS':        result = handleGetDDS(e); break;
         case 'getTasks':      result = handleGetTasks(e); break;
 
+        // ─── СТАТУС ПЛАТЕЖЕЙ ───
+        case 'getPaymentsStatus': result = handleGetPaymentsStatus(e); break;
+
         // ─── БЛОКНОТ ФИЛИАЛОВ ───
         case 'getBranchNotes': result = handleGetBranchNotes(e); break;
 
@@ -135,6 +138,9 @@ function doPost(e) {
         // ─── ОЧЕРЕДЬ АГЕНТОВ ───
         case 'queueAgent':       result = handleQueueAgent(data); break;
         case 'updateQueue':      result = handleUpdateQueue(data); break;
+
+        // ─── СТАТУС ПЛАТЕЖЕЙ ───
+        case 'savePaymentsStatus': result = handlePostPaymentsStatus(data); break;
 
         // ─── БЛОКНОТ ФИЛИАЛОВ ───
         case 'addBranchNote':    result = handleAddBranchNote(data); break;
@@ -1336,6 +1342,87 @@ function handleUpdateCredit(data) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// СТАТУС ПЛАТЕЖЕЙ (кредиты/аренда/субаренда — хранение в таблице)
+// ═══════════════════════════════════════════════════════════════
+// Лист "ПЛАТЕЖИ": A=Месяц | B=credits JSON | C=rent JSON | D=subrent JSON | E=extraIncome
+
+function handleGetPaymentsStatus(e) {
+  var ym = (e && e.parameter && e.parameter.month) || getCurrentYearMonth_();
+  var row = findPaymentsRow_(ym);
+  if (!row) return { success: true, month: ym, credits: {}, rent: {}, subrent: {}, extraIncome: false };
+  return { success: true, month: ym, credits: row.credits, rent: row.rent, subrent: row.subrent, extraIncome: row.extraIncome };
+}
+
+function handlePostPaymentsStatus(data) {
+  var ym = data.month || getCurrentYearMonth_();
+  var sheet = getOrCreatePaymentsSheet_();
+  var allData = sheet.getDataRange().getValues();
+  var rowIdx = -1;
+
+  for (var i = 1; i < allData.length; i++) {
+    if (String(allData[i][0]).trim() === ym) { rowIdx = i + 1; break; }
+  }
+
+  // Читаем существующие данные или создаём пустые
+  var existing = { credits: {}, rent: {}, subrent: {}, extraIncome: false };
+  if (rowIdx > 0) {
+    try { existing.credits = JSON.parse(allData[rowIdx - 1][1] || '{}'); } catch(e) {}
+    try { existing.rent = JSON.parse(allData[rowIdx - 1][2] || '{}'); } catch(e) {}
+    try { existing.subrent = JSON.parse(allData[rowIdx - 1][3] || '{}'); } catch(e) {}
+    existing.extraIncome = allData[rowIdx - 1][4] === true || allData[rowIdx - 1][4] === 1 || allData[rowIdx - 1][4] === '1';
+  }
+
+  // Мержим — обновляем только то что пришло
+  if (data.credits !== undefined) existing.credits = data.credits;
+  if (data.rent !== undefined) existing.rent = data.rent;
+  if (data.subrent !== undefined) existing.subrent = data.subrent;
+  if (data.extraIncome !== undefined) existing.extraIncome = data.extraIncome;
+
+  var values = [ym, JSON.stringify(existing.credits), JSON.stringify(existing.rent), JSON.stringify(existing.subrent), existing.extraIncome ? 1 : 0];
+
+  if (rowIdx > 0) {
+    sheet.getRange(rowIdx, 1, 1, 5).setValues([values]);
+  } else {
+    sheet.appendRow(values);
+  }
+
+  return { success: true, saved: ym };
+}
+
+function getCurrentYearMonth_() {
+  var now = new Date();
+  return now.getFullYear() + '-' + (now.getMonth() + 1);
+}
+
+function findPaymentsRow_(ym) {
+  var sheet = getAtelieSheet('ПЛАТЕЖИ');
+  if (!sheet) return null;
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === ym) {
+      var credits = {}, rent = {}, subrent = {};
+      try { credits = JSON.parse(data[i][1] || '{}'); } catch(e) {}
+      try { rent = JSON.parse(data[i][2] || '{}'); } catch(e) {}
+      try { subrent = JSON.parse(data[i][3] || '{}'); } catch(e) {}
+      var extra = data[i][4] === true || data[i][4] === 1 || data[i][4] === '1';
+      return { credits: credits, rent: rent, subrent: subrent, extraIncome: extra };
+    }
+  }
+  return null;
+}
+
+function getOrCreatePaymentsSheet_() {
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('ПЛАТЕЖИ');
+  if (!sheet) {
+    sheet = ss.insertSheet('ПЛАТЕЖИ');
+    sheet.appendRow(['Месяц', 'Кредиты', 'Аренда', 'Субаренда', 'ДопДоход']);
+    sheet.getRange('1:1').setFontWeight('bold');
+  }
+  return sheet;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // НАСТРОЙКИ
 // ═══════════════════════════════════════════════════════════════
 
@@ -2414,5 +2501,16 @@ function handleGetDailyChart(e) {
     result.push(dayResult);
   }
 
-  return { success: true, days: result };
+  // Добавляем план дня из monthlyPlans
+  var curMonth = today.getMonth() + 1;
+  var daysInMonth = new Date(today.getFullYear(), curMonth, 0).getDate();
+  var monthlyPlans = readPlansFromSheet(ss) || {};
+  var mp = monthlyPlans[curMonth] || null;
+  var plan = {
+    dailyAtelie: mp && mp.atelie ? Math.round(mp.atelie / daysInMonth) : 0,
+    dailyClients: mp && mp.clients ? Math.round(mp.clients / daysInMonth) : 0,
+    daysInMonth: daysInMonth
+  };
+
+  return { success: true, days: result, plan: plan };
 }

@@ -305,10 +305,9 @@ function calcPulseResult(rawVal, dailyBank, daysLeft, daysInMonth, totalExpenses
 var FIXED_COSTS = 450000;
 // Кредиты ежемесячно
 var CREDIT_PAYMENTS = 321000;
-// Доп. доход (получаем в день оплаты кредитов)
-var EXTRA_INCOME = 100000;
+// EXTRA_INCOME определён в payments.js
 
-var MONTH_NAMES_SHORT = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+var PLANNER_MONTH_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 var MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 function getDaysInMonth(m, y) {
@@ -417,7 +416,7 @@ function renderPlanner(data) {
   }
 
   // ═══ RENDER ═══
-  var capMonth = function(m) { return MONTH_NAMES_SHORT[m].charAt(0).toUpperCase() + MONTH_NAMES_SHORT[m].slice(1); };
+  var capMonth = function(m) { return PLANNER_MONTH_NAMES[m].charAt(0).toUpperCase() + PLANNER_MONTH_NAMES[m].slice(1); };
 
   var bigNum = function(val) {
     var color = val >= 0 ? 'var(--green)' : 'var(--red)';
@@ -582,7 +581,7 @@ function calcRealMarginData(branchData) {
 
   // Собираем расходы из RSC
   var rscExpenses = {};
-  if (rscData && rscData.transactions) {
+  if (typeof rscData !== 'undefined' && rscData && rscData.transactions) {
     var filtered = rscFilterMonth(rscData.transactions);
     filtered.forEach(function(tx) {
       var cat = rscGetCat(tx);
@@ -679,7 +678,8 @@ function renderRealMargin(branchData) {
 
 // Per-filial expenses from RSC ekvayring merchant mapping
 function getFilialExpenses() {
-  if (!rscData || !rscData.ekvayring) return {};
+  if (typeof rscData === 'undefined' || !rscData || !rscData.ekvayring) return {};
+  if (typeof rscMerchantMap === 'undefined' || !rscMerchantMap) return {};
   var result = {};
   for (var mid in rscData.ekvayring) {
     var branch = rscMerchantMap[mid];

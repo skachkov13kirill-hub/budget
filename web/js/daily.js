@@ -21,6 +21,17 @@ function loadDailyChart() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.success) throw new Error(data.error || 'Ошибка');
+      // Если API не вернул plan — строим из state.branches
+      if (!data.plan && state.branches && state.branches.totals) {
+        var t = state.branches.totals;
+        var now = new Date();
+        var daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        data.plan = {
+          dailyAtelie: t.plan && t.plan.atelie ? Math.round(t.plan.atelie / daysInMonth) : 0,
+          dailyClients: t.plan && t.plan.clients ? Math.round(t.plan.clients / daysInMonth) : 0,
+          daysInMonth: daysInMonth
+        };
+      }
       dailyChartData = data;
       dailyChartLoaded = true;
       renderDailyChart(data);
@@ -39,11 +50,11 @@ function renderDailyChart(data) {
   document.getElementById('dailyChartContent').style.display = '';
 
   var days = data.days;
-  var plan = data.plan;
+  var plan = data.plan || { dailyAtelie: 0, dailyClients: 0 };
   var maxAtelie = Math.max.apply(null, days.map(function(d) { return d.atelie; })) || 1;
-  maxAtelie = Math.max(maxAtelie, plan.dailyAtelie) * 1.1;
+  maxAtelie = Math.max(maxAtelie, plan.dailyAtelie || 0) * 1.1;
   var maxClients = Math.max.apply(null, days.map(function(d) { return d.clients; })) || 1;
-  maxClients = Math.max(maxClients, plan.dailyClients) * 1.1;
+  maxClients = Math.max(maxClients, plan.dailyClients || 0) * 1.1;
 
   var WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
