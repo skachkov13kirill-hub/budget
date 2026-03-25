@@ -1,15 +1,15 @@
-const CACHE_NAME = 'dresscode-v24';
+const CACHE_NAME = 'dresscode-v25';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './css/app.css?v=24',
-  './js/app.js?v=24',
-  './js/weather.js?v=24',
-  './js/business.js?v=24',
-  './js/payments.js?v=24',
-  './js/tasks.js?v=24',
-  './js/agents.js?v=24',
-  './js/daily.js?v=24',
+  './css/app.css?v=25',
+  './js/app.js?v=25',
+  './js/weather.js?v=25',
+  './js/business.js?v=25',
+  './js/payments.js?v=25',
+  './js/tasks.js?v=25',
+  './js/agents.js?v=25',
+  './js/daily.js?v=25',
   './agents-config.json',
   './manifest.json'
 ];
@@ -40,16 +40,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache first for static assets
+  // NETWORK FIRST for all assets — always try fresh, fallback to cache
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const fetched = fetch(event.request).then(response => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      }).catch(() => cached);
-
-      return cached || fetched;
-    })
+    fetch(event.request).then(response => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });

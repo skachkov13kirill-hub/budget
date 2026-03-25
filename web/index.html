@@ -4,21 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=24">
+<link rel="stylesheet" href="css/app.css?v=25">
 <title>DressCode · Дашборд</title>
 <script>
-// Force SW update: unregister old SW and clear caches if version mismatch
+// Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var EXPECTED='dresscode-v24';
+  var CLEAN_KEY='dc_cleaned_v25';
+  if(localStorage.getItem(CLEAN_KEY)) return;
+  var needsClean=false;
   if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      if(regs.length>0){needsClean=true;regs.forEach(function(r){r.unregister();});}
+    });
+  }
+  if('caches' in window){
     caches.keys().then(function(names){
-      var hasOld=names.some(function(n){return n!==EXPECTED&&n.indexOf('dresscode')===0;});
-      if(hasOld){
-        names.forEach(function(n){if(n!==EXPECTED)caches.delete(n);});
-        navigator.serviceWorker.getRegistrations().then(function(regs){
-          regs.forEach(function(r){r.unregister();});
-        });
-        setTimeout(function(){location.reload(true);},500);
+      if(names.length>0){needsClean=true;names.forEach(function(n){caches.delete(n);});}
+      if(needsClean){
+        localStorage.setItem(CLEAN_KEY,'1');
+        setTimeout(function(){location.reload(true);},600);
       }
     });
   }
@@ -227,12 +231,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=24"></script>
-<script src="js/weather.js?v=24"></script>
-<script src="js/payments.js?v=24"></script>
-<script src="js/agents.js?v=24"></script>
-<script src="js/tasks.js?v=24"></script>
-<script src="js/business.js?v=24"></script>
-<script src="js/daily.js?v=24"></script>
+<script src="js/app.js?v=25"></script>
+<script src="js/weather.js?v=25"></script>
+<script src="js/payments.js?v=25"></script>
+<script src="js/agents.js?v=25"></script>
+<script src="js/tasks.js?v=25"></script>
+<script src="js/business.js?v=25"></script>
+<script src="js/daily.js?v=25"></script>
 </body>
 </html>
