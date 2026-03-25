@@ -6,6 +6,24 @@
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/app.css?v=24">
 <title>DressCode · Дашборд</title>
+<script>
+// Force SW update: unregister old SW and clear caches if version mismatch
+(function(){
+  var EXPECTED='dresscode-v24';
+  if('serviceWorker' in navigator){
+    caches.keys().then(function(names){
+      var hasOld=names.some(function(n){return n!==EXPECTED&&n.indexOf('dresscode')===0;});
+      if(hasOld){
+        names.forEach(function(n){if(n!==EXPECTED)caches.delete(n);});
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          regs.forEach(function(r){r.unregister();});
+        });
+        setTimeout(function(){location.reload(true);},500);
+      }
+    });
+  }
+})();
+</script>
 </head>
 <body>
 
