@@ -36,13 +36,21 @@ function loadCache() {
     var raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     var c = JSON.parse(raw);
+    // Проверяем что кэш для текущего месяца
+    var now = new Date();
+    if (c.cacheMonth && (c.cacheMonth !== now.getMonth() + 1 || c.cacheYear !== now.getFullYear())) return null;
     if (Date.now() - c.updatedAt > CACHE_TTL) return null;
     return c;
   } catch(e) { return null; }
 }
 
 function saveCache(s) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(s)); } catch(e) {}
+  try {
+    var now = new Date();
+    s.cacheMonth = now.getMonth() + 1;
+    s.cacheYear = now.getFullYear();
+    localStorage.setItem(CACHE_KEY, JSON.stringify(s));
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -67,12 +75,17 @@ function refreshAll() {
   btn.classList.add('spinning');
   showToast('Обновление...');
 
-  var month = new Date().getMonth() + 1;
+  var sel = document.getElementById('bizMonthSelect');
+  var month = sel ? parseInt(sel.value) : new Date().getMonth() + 1;
+  var ySel = document.getElementById('bizYearSelect');
+  var year = ySel ? parseInt(ySel.value) : new Date().getFullYear();
+  // Сброс dailyChart при обновлении
+  if (typeof dailyChartLoaded !== 'undefined') dailyChartLoaded = false;
   // Обновить погоду при refresh
   if (typeof fetchWeather === 'function') fetchWeather();
 
   Promise.all([
-    fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
     fetchWithTimeout(API_ATELIE + '?action=getAll', 15000).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var branchResp = results[0];
@@ -92,7 +105,7 @@ function refreshAll() {
     showLastUpdate();
     // Save daily snapshot
     if (state.branches && !bizIsHistorical) {
-      saveSnapshot(state.branches, month, new Date().getFullYear());
+      saveSnapshot(state.branches, month, year);
     }
     if (typeof bizUpdateDayNav === 'function') bizUpdateDayNav();
     btn.classList.remove('spinning');
@@ -126,6 +139,8 @@ function showLastUpdate() {
 
 // Branch loading for specific month + year
 function loadBranches(forceRefresh) {
+  // Сброс dailyChart при смене месяца
+  if (typeof dailyChartLoaded !== 'undefined') dailyChartLoaded = false;
   var sel = document.getElementById('bizMonthSelect');
   var ySel = document.getElementById('bizYearSelect');
   var month = parseInt(sel.value);

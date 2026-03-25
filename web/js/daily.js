@@ -119,6 +119,18 @@ function renderDailyChart(data) {
     html += '<div style="position:absolute;top:0;bottom:0;left:' + Math.min(planPctCl, 100) + '%;width:2px;background:#FF6B6B;opacity:0.5;"></div>';
     html += '</div>';
 
+    // План дня: % выполнения и разница в ₽
+    if (plan.dailyAtelie > 0) {
+      var dayPlanPct = Math.round(d.atelie / plan.dailyAtelie * 100);
+      var dayPlanDiff = d.atelie - plan.dailyAtelie;
+      var planColor = dayPlanPct >= 100 ? '#22C55E' : dayPlanPct >= 80 ? '#FFAA00' : '#FF4D4D';
+      var diffSign = dayPlanDiff >= 0 ? '+' : '';
+      html += '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:#888;">';
+      html += '<span>план ' + fmtShort(plan.dailyAtelie) + '</span>';
+      html += '<span style="font-weight:700;color:' + planColor + ';">' + dayPlanPct + '% ' + diffSign + fmtShort(dayPlanDiff) + '</span>';
+      html += '</div>';
+    }
+
     // Детали по филиалам (скрыты)
     html += '<div id="dailyDetail-' + i + '" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;"></div>';
 

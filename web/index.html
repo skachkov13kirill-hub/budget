@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=25">
+<link rel="stylesheet" href="css/app.css?v=26">
 <title>DressCode · Дашборд</title>
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var CLEAN_KEY='dc_cleaned_v25';
+  var CLEAN_KEY='dc_cleaned_v26';
   if(localStorage.getItem(CLEAN_KEY)) return;
   var needsClean=false;
   if('serviceWorker' in navigator){
@@ -106,9 +106,10 @@
       <div class="progress-wrap"><div class="progress-fill" id="ov-progress" style="width:0%">0%</div></div>
     </div>
   </div>
+  <div id="todayReportCard" style="display:none;"></div>
+  <div id="filialsGrid"></div>
   <div id="dailyPulseCard" style="display:none;"></div>
   <div id="plannerCard" style="display:none;"></div>
-  <div id="filialsGrid"></div>
 </div>
 
 <!-- TAB: ЕЖЕДНЕВНО -->
@@ -231,12 +232,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=25"></script>
-<script src="js/weather.js?v=25"></script>
-<script src="js/payments.js?v=25"></script>
-<script src="js/agents.js?v=25"></script>
-<script src="js/tasks.js?v=25"></script>
-<script src="js/business.js?v=25"></script>
-<script src="js/daily.js?v=25"></script>
+<script src="js/app.js?v=26"></script>
+<script src="js/weather.js?v=26"></script>
+<script src="js/payments.js?v=26"></script>
+<script src="js/agents.js?v=26"></script>
+<script src="js/tasks.js?v=26"></script>
+<script src="js/business.js?v=26"></script>
+<script src="js/daily.js?v=26"></script>
 </body>
 </html>

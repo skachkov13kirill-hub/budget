@@ -1,15 +1,15 @@
-const CACHE_NAME = 'dresscode-v25';
+const CACHE_NAME = 'dresscode-v26';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './css/app.css?v=25',
-  './js/app.js?v=25',
-  './js/weather.js?v=25',
-  './js/business.js?v=25',
-  './js/payments.js?v=25',
-  './js/tasks.js?v=25',
-  './js/agents.js?v=25',
-  './js/daily.js?v=25',
+  './css/app.css?v=26',
+  './js/app.js?v=26',
+  './js/weather.js?v=26',
+  './js/business.js?v=26',
+  './js/payments.js?v=26',
+  './js/tasks.js?v=26',
+  './js/agents.js?v=26',
+  './js/daily.js?v=26',
   './agents-config.json',
   './manifest.json'
 ];
@@ -31,11 +31,14 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Network first for API calls
+  // Network first for API calls + cache successful responses for offline
   if (event.request.url.includes('script.google.com')) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => caches.match(event.request))
+      fetch(event.request).then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      }).catch(() => caches.match(event.request))
     );
     return;
   }

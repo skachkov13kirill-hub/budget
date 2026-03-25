@@ -596,6 +596,10 @@ function handleGetBranches(e) {
         } else {
           factHimchistka = branchData.himchistka || 0;
         }
+        // Fallback: если daily не содержит химчистку, берём из листа "Общ"
+        if (factHimchistka === 0 && d && d.himchistka > 0) {
+          factHimchistka = d.himchistka;
+        }
       } else {
         factHimchistka = d ? d.himchistka : 0;
       }
@@ -846,7 +850,7 @@ function parseBranchSheet(sheet, month, monthNames, shortMonths) {
 function calculateForecast(factTotal, planTotal, month) {
   var now = new Date();
   var daysInMonth = new Date(now.getFullYear(), month, 0).getDate();
-  var daysPassed = now.getMonth() + 1 === month ? now.getDate() : (now.getMonth() + 1 > month ? daysInMonth : 0);
+  var daysPassed = now.getMonth() + 1 === month ? Math.max(1, now.getDate() - 1) : (now.getMonth() + 1 > month ? daysInMonth : 0);
   var daysLeft = daysInMonth - daysPassed;
   
   if (daysPassed === 0) return null;

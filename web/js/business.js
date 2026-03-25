@@ -127,6 +127,9 @@ function renderBizOverview(data) {
   document.getElementById('bizLoading').style.display = 'none';
   document.getElementById('bizOverviewContent').style.display = 'block';
 
+  // Блок «Сегодня» — отчёты филиалов
+  renderTodayReport(data);
+
   // Пульс дня
   renderDailyPulse(data);
 
@@ -1769,4 +1772,144 @@ function bizSnapToday() {
   bizIsHistorical = false;
   loadBranches(true);
   bizUpdateDayLabel();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// БЛОК «СЕГОДНЯ» — отчёты филиалов + план дня
+// ═══════════════════════════════════════════════════════════════
+var _todayData = null;
+
+function renderTodayReport(data) {
+  var el = document.getElementById('todayReportCard');
+  if (!el || !data || !data.filials) { if (el) el.style.display = 'none'; return; }
+
+  var now = new Date();
+  var curMonth = now.getMonth() + 1;
+  var selMonth = parseInt(document.getElementById('bizMonthSelect').value);
+  var selYear = parseInt(document.getElementById('bizYearSelect').value);
+  if (selMonth !== curMonth || selYear !== now.getFullYear()) { el.style.display = 'none'; return; }
+
+  var daysInMonth = new Date(now.getFullYear(), curMonth, 0).getDate();
+  var today = now.getDate();
+  var todayLabel = (today < 10 ? '0' : '') + today + '.' + (curMonth < 10 ? '0' : '') + curMonth;
+
+  // Загружаем данные за сегодня из getDailyChart (кэшируем)
+  if (_todayData && _todayData.ts && Date.now() - _todayData.ts < 120000) {
+    _renderTodayBlock(el, data, _todayData.days, todayLabel, daysInMonth);
+    return;
+  }
+
+  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=2', 15000)
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+      if (resp.success && resp.days) {
+        _todayData = { days: resp.days, ts: Date.now() };
+        _renderTodayBlock(el, data, resp.days, todayLabel, daysInMonth);
+      }
+    }).catch(function() {
+      // Fallback: показываем без данных за сегодня
+      _renderTodayBlock(el, data, null, todayLabel, daysInMonth);
+    });
+}
+
+function _renderTodayBlock(el, data, dailyDays, todayLabel, daysInMonth) {
+  var now = new Date();
+  var today = now.getDate();
+  var curMonth = now.getMonth() + 1;
+
+  // Найти данные за сегодня в dailyDays
+  var todayDay = null;
+  if (dailyDays) {
+    for (var i = dailyDays.length - 1; i >= 0; i--) {
+      if (dailyDays[i].date === todayLabel) { todayDay = dailyDays[i]; break; }
+    }
+  }
+
+  // План на день (общий) = план на месяц / дней в месяце
+  var totalPlan = data.totals && data.totals.plan ? data.totals.plan : {};
+  var dailyPlanAtelie = totalPlan.atelie ? Math.round(totalPlan.atelie / daysInMonth) : 0;
+
+  var reported = 0;
+  var totalToday = 0;
+  var html = '<div class="card" style="border-radius:16px;padding:14px;margin-bottom:12px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  html += '<div style="font-size:14px;font-weight:800;">&#x1F4CB; Сегодня ' + today + ' ' + MONTH_NAMES[curMonth].substring(0,3) + '</div>';
+  html += '<div id="todayReportCount" style="font-size:11px;color:#888;"></div>';
+  html += '</div>';
+
+  // Сортируем филиалы: сначала сдавшие (по убыванию выручки), потом не сдавшие
+  var items = [];
+  for (var i = 0; i < data.filials.length; i++) {
+    var f = data.filials[i];
+    var todayAtelie = 0;
+    var todayClients = 0;
+    if (todayDay && todayDay.branches) {
+      for (var b = 0; b < todayDay.branches.length; b++) {
+        if (todayDay.branches[b].code === f.code) {
+          todayAtelie = todayDay.branches[b].atelie;
+          todayClients = todayDay.branches[b].clients;
+          break;
+        }
+      }
+    }
+    var hasReport = todayAtelie > 0 || todayClients > 0;
+    if (hasReport) reported++;
+    totalToday += todayAtelie;
+
+    // Индивидуальный план на день
+    var branchDailyPlan = f.plan && f.plan.atelie ? Math.round(f.plan.atelie / daysInMonth) : 0;
+    var pct = branchDailyPlan > 0 ? Math.round(todayAtelie / branchDailyPlan * 100) : 0;
+    var diff = todayAtelie - branchDailyPlan;
+
+    items.push({ code: f.code, name: f.name, atelie: todayAtelie, clients: todayClients,
+                 plan: branchDailyPlan, pct: pct, diff: diff, hasReport: hasReport });
+  }
+
+  items.sort(function(a, b) {
+    if (a.hasReport !== b.hasReport) return b.hasReport - a.hasReport;
+    return b.atelie - a.atelie;
+  });
+
+  for (var j = 0; j < items.length; j++) {
+    var it = items[j];
+    var dot = it.hasReport ? '<span style="color:#22C55E;font-size:10px;">&#x25CF;</span>' : '<span style="color:#DDD;font-size:10px;">&#x25CF;</span>';
+    var pctColor = it.pct >= 100 ? '#22C55E' : it.pct >= 80 ? '#FFAA00' : '#FF4D4D';
+    var diffStr = it.diff >= 0 ? '+' + fmtShort(it.diff) : fmtShort(it.diff);
+
+    html += '<div style="display:flex;align-items:center;padding:5px 0;border-bottom:1px solid #F3F4F6;gap:6px;">';
+    html += dot;
+    html += '<div style="width:30px;font-size:11px;font-weight:600;color:#555;">' + it.code + '</div>';
+
+    if (it.hasReport) {
+      html += '<div style="flex:1;font-size:13px;font-weight:700;">' + fmtShort(it.atelie) + '</div>';
+      html += '<div style="font-size:11px;color:#888;">' + it.clients + ' кл</div>';
+      html += '<div style="width:60px;text-align:right;font-size:11px;font-weight:700;color:' + pctColor + ';">' + it.pct + '%</div>';
+      html += '<div style="width:55px;text-align:right;font-size:10px;color:' + pctColor + ';">' + diffStr + '</div>';
+    } else {
+      html += '<div style="flex:1;font-size:12px;color:#CCC;font-style:italic;">нет отчёта</div>';
+      html += '<div style="width:60px;text-align:right;font-size:10px;color:#DDD;">план ' + fmtShort(it.plan) + '</div>';
+      html += '<div style="width:55px;"></div>';
+    }
+    html += '</div>';
+  }
+
+  // Итого
+  var totalPct = dailyPlanAtelie > 0 ? Math.round(totalToday / dailyPlanAtelie * 100) : 0;
+  var totalDiff = totalToday - dailyPlanAtelie;
+  var totalPctColor = totalPct >= 100 ? '#22C55E' : totalPct >= 80 ? '#FFAA00' : '#FF4D4D';
+  html += '<div style="display:flex;align-items:center;padding:8px 0 2px;gap:6px;font-weight:700;">';
+  html += '<div style="width:38px;font-size:11px;color:#333;">Итого</div>';
+  html += '<div style="flex:1;font-size:14px;">' + fmtShort(totalToday) + '</div>';
+  html += '<div style="font-size:11px;color:#888;">план ' + fmtShort(dailyPlanAtelie) + '</div>';
+  html += '<div style="width:60px;text-align:right;font-size:12px;color:' + totalPctColor + ';">' + totalPct + '%</div>';
+  html += '<div style="width:55px;text-align:right;font-size:11px;color:' + totalPctColor + ';">' + (totalDiff >= 0 ? '+' : '') + fmtShort(totalDiff) + '</div>';
+  html += '</div>';
+
+  html += '</div>';
+  el.innerHTML = html;
+  el.style.display = '';
+
+  // Обновляем счётчик
+  var cnt = document.getElementById('todayReportCount');
+  if (cnt) cnt.textContent = reported + ' из ' + items.length + ' сдали';
 }
