@@ -59,6 +59,7 @@ function saveCache(s) {
 function fetchWithTimeout(url, timeout, options) {
   timeout = timeout || 15000;
   options = options || {};
+  options.cache = 'no-store';
   var controller = new AbortController();
   options.signal = controller.signal;
   var id = setTimeout(function() { controller.abort(); }, timeout);
@@ -84,9 +85,10 @@ function refreshAll() {
   // Обновить погоду при refresh
   if (typeof fetchWeather === 'function') fetchWeather();
 
+  var cacheBust = '&_t=' + Date.now();
   Promise.all([
-    fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
-    fetchWithTimeout(API_ATELIE + '?action=getAll', 15000).then(function(r) { return r.json(); }).catch(function() { return null; })
+    fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year + cacheBust, 20000).then(function(r) { return r.json(); }).catch(function() { return null; }),
+    fetchWithTimeout(API_ATELIE + '?action=getAll' + cacheBust, 15000).then(function(r) { return r.json(); }).catch(function() { return null; })
   ]).then(function(results) {
     var branchResp = results[0];
     var allResp = results[1];
@@ -174,10 +176,16 @@ function loadBranches(forceRefresh) {
   document.getElementById('bizError').style.display = 'none';
   document.getElementById('filialsGrid').innerHTML = '';
 
-  fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year, 20000)
+  fetchWithTimeout(API_ATELIE + '?action=getBranches&month=' + month + '&year=' + year + '&_t=' + Date.now(), 20000)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+      // Sync state.branches for consistent caching
+      if (isCurrentMonth) {
+        state.branches = data;
+        state.updatedAt = Date.now();
+        saveCache(state);
+      }
       applyBranchData(data, month);
     })
     .catch(function(err) {

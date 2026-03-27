@@ -8,6 +8,13 @@ function renderBizOverview(data) {
   if (!data || !data.totals) return;
   var t = data.totals;
 
+  // Fallback: если plan.clients нет в totals — суммируем из филиалов
+  if (t.plan && !t.plan.clients && data.filials) {
+    var sumCl = 0;
+    data.filials.forEach(function(f) { if (f.plan && f.plan.clients) sumCl += f.plan.clients; });
+    if (sumCl > 0) t.plan.clients = sumCl;
+  }
+
   // Рассчитываем план на текущий день
   var now = new Date();
   var month = data.currentMonth || (now.getMonth() + 1);
@@ -787,6 +794,59 @@ function renderFilials(data) {
     card.addEventListener('click', function() { openFilialDetail(f, month); });
     grid.appendChild(card);
   });
+
+  // ── Карточка "Химчистка" (общая по сети) ──
+  if (data.totals) {
+    var t = data.totals;
+    var himchFact = 0;
+    data.filials.forEach(function(f) { himchFact += (f.fact.himchistka || 0); });
+    if (!himchFact) himchFact = t.fact.himchistka || 0;
+    var himchPlan = (t.plan && t.plan.himchistka) ? t.plan.himchistka : 0;
+    var himchPerf = himchPlan > 0 ? Math.round(himchFact / himchPlan * 100) : 0;
+    var himchZone = himchPerf >= 95 ? 'green' : himchPerf >= 85 ? 'yellow' : 'red';
+    var himchPerfClass = himchZone === 'green' ? 'perf-high' : himchZone === 'yellow' ? 'perf-med' : 'perf-low';
+    var himchRankColor = himchZone === 'red' ? '#FF4D4D' : himchZone === 'yellow' ? '#FFAA00' : '#22C55E';
+
+    // Прогноз химчистки
+    var himchFcHtml = '';
+    if (month === nowMonth && himchFact > 0) {
+      var wf = typeof getWeatherFactor === 'function' ? getWeatherFactor(month) : null;
+      var himchFc = calcForecast3Weeks(himchFact, month, wf);
+      var himchFcTotal = himchFc ? himchFc.total : himchFact;
+      var himchFcPct = himchPlan > 0 ? Math.round(himchFcTotal / himchPlan * 100) : 0;
+      var himchFcEmoji = himchFcPct >= 95 ? '\uD83D\uDFE2' : himchFcPct >= 85 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+      himchFcHtml = '<div style="background:#EEF2FF;padding:10px 12px;border-radius:10px;margin-top:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<div><div style="color:#7B61FF;font-weight:600;margin-bottom:2px;">\uD83D\uDD2E Прогноз</div></div>' +
+        '<div style="text-align:right;"><div style="font-weight:800;font-size:14px;">' + fmt(himchFcTotal) + ' ' + himchFcEmoji + '</div><div style="font-size:10px;color:#888;">' + himchFcPct + '% плана</div></div></div>';
+    }
+
+    // Разбивка по филиалам
+    var himchByBranch = '';
+    data.filials.forEach(function(f) {
+      var hc = f.fact.himchistka || 0;
+      if (hc > 0) {
+        himchByBranch += '<div style="display:flex;justify-content:space-between;padding:3px 0;"><span style="color:#666;">' + f.name + '</span><strong>' + fmtShort(hc) + '</strong></div>';
+      }
+    });
+
+    var zoneLabel = document.createElement('div');
+    zoneLabel.style.cssText = 'font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 6px;font-weight:700;';
+    zoneLabel.innerHTML = '\uD83E\uDDF9 Химчистка (сеть)';
+    grid.appendChild(zoneLabel);
+
+    var himchCard = document.createElement('div');
+    himchCard.className = 'filial-card';
+    himchCard.style.borderLeft = '4px solid ' + himchRankColor;
+    himchCard.innerHTML =
+      '<div class="filial-top"><div class="filial-name">\uD83E\uDDF9 Химчистка</div>' +
+      '<div class="filial-rank" style="background:' + himchRankColor + ';">' + himchPerf + '%</div></div>' +
+      '<div class="filial-row"><span>Факт:</span><span><strong>' + fmt(himchFact) + '</strong></span></div>' +
+      '<div style="font-size:10px;color:var(--text-3);margin-bottom:6px;">План: ' + fmt(himchPlan) + ' (' + himchPerf + '%)</div>' +
+      '<div class="filial-perf ' + himchPerfClass + '">' + himchPerf + '% от плана</div>' +
+      (himchByBranch ? '<div style="background:#E7F3FF;padding:8px;border-radius:8px;margin-top:8px;font-size:11px;">' + himchByBranch + '</div>' : '') +
+      himchFcHtml;
+    grid.appendChild(himchCard);
+  }
 }
 
 // ── FILIAL DETAIL OVERLAY ── (moved to bottom of file, enhanced version)
@@ -1743,12 +1803,14 @@ function bizUpdateDayLabel() {
   var label = document.getElementById('bizDayLabel');
   if (!label) return;
 
+  var rightBtn = document.getElementById('bizDayRight');
   if (bizSnapIndex === -1) {
     var now = new Date();
     var dwd = Math.max(1, now.getDate() - 1);
     label.textContent = 'данные за ' + dwd + ' ' + MONTH_NAMES[now.getMonth() + 1].substring(0, 3);
     label.classList.remove('historical');
     bizIsHistorical = false;
+    if (rightBtn) rightBtn.style.visibility = 'hidden';
     // Show pulse/planner
     var pulse = document.getElementById('dailyPulseCard');
     var planner = document.getElementById('plannerCard');
@@ -1759,6 +1821,7 @@ function bizUpdateDayLabel() {
     var month = parseInt(document.getElementById('bizMonthSelect').value);
     label.textContent = snap.day + ' ' + MONTH_NAMES[month].substring(0, 3) + ' (снимок)';
     label.classList.add('historical');
+    if (rightBtn) rightBtn.style.visibility = 'visible';
     // Hide pulse/planner for historical view
     var pulse = document.getElementById('dailyPulseCard');
     var planner = document.getElementById('plannerCard');
@@ -1784,40 +1847,51 @@ function renderTodayReport(data) {
   if (!el || !data || !data.filials) { if (el) el.style.display = 'none'; return; }
 
   var now = new Date();
-  var curMonth = now.getMonth() + 1;
   var selMonth = parseInt(document.getElementById('bizMonthSelect').value);
   var selYear = parseInt(document.getElementById('bizYearSelect').value);
-  if (selMonth !== curMonth || selYear !== now.getFullYear()) { el.style.display = 'none'; return; }
+  var daysInMonth = new Date(selYear, selMonth, 0).getDate();
 
-  var daysInMonth = new Date(now.getFullYear(), curMonth, 0).getDate();
-  var today = now.getDate();
-  var todayLabel = (today < 10 ? '0' : '') + today + '.' + (curMonth < 10 ? '0' : '') + curMonth;
+  // Определяем целевой день: снапшот или сегодня
+  var targetDay, targetMonth, targetYear;
+  if (bizIsHistorical && bizSnapIndex >= 0 && bizSnapList[bizSnapIndex]) {
+    targetDay = bizSnapList[bizSnapIndex].day;
+    targetMonth = selMonth;
+    targetYear = selYear;
+  } else {
+    var curMonth = now.getMonth() + 1;
+    if (selMonth !== curMonth || selYear !== now.getFullYear()) { el.style.display = 'none'; return; }
+    targetDay = now.getDate();
+    targetMonth = curMonth;
+    targetYear = now.getFullYear();
+  }
 
-  // Загружаем данные за сегодня из getDailyChart (кэшируем)
-  if (_todayData && _todayData.ts && Date.now() - _todayData.ts < 120000) {
-    _renderTodayBlock(el, data, _todayData.days, todayLabel, daysInMonth);
+  var targetLabel = (targetDay < 10 ? '0' : '') + targetDay + '.' + (targetMonth < 10 ? '0' : '') + targetMonth;
+
+  // Загружаем данные из getDailyChart (кэшируем на весь месяц)
+  var daysToFetch = now.getDate(); // от 1-го числа до сегодня
+  if (_todayData && _todayData.ts && Date.now() - _todayData.ts < 120000 && _todayData.fetchDays >= daysToFetch) {
+    _renderTodayBlock(el, data, _todayData.days, targetLabel, daysInMonth, targetDay, targetMonth);
     return;
   }
 
-  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=2', 15000)
+  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=' + daysToFetch, 15000)
     .then(function(r) { return r.json(); })
     .then(function(resp) {
       if (resp.success && resp.days) {
-        _todayData = { days: resp.days, ts: Date.now() };
-        _renderTodayBlock(el, data, resp.days, todayLabel, daysInMonth);
+        _todayData = { days: resp.days, ts: Date.now(), fetchDays: daysToFetch };
+        _renderTodayBlock(el, data, resp.days, targetLabel, daysInMonth, targetDay, targetMonth);
       }
     }).catch(function() {
-      // Fallback: показываем без данных за сегодня
-      _renderTodayBlock(el, data, null, todayLabel, daysInMonth);
+      _renderTodayBlock(el, data, null, targetLabel, daysInMonth, targetDay, targetMonth);
     });
 }
 
-function _renderTodayBlock(el, data, dailyDays, todayLabel, daysInMonth) {
+function _renderTodayBlock(el, data, dailyDays, todayLabel, daysInMonth, targetDay, targetMonth) {
   var now = new Date();
-  var today = now.getDate();
-  var curMonth = now.getMonth() + 1;
+  var today = targetDay || now.getDate();
+  var curMonth = targetMonth || (now.getMonth() + 1);
 
-  // Найти данные за сегодня в dailyDays
+  // Найти данные за целевой день в dailyDays
   var todayDay = null;
   if (dailyDays) {
     for (var i = dailyDays.length - 1; i >= 0; i--) {
@@ -1829,11 +1903,26 @@ function _renderTodayBlock(el, data, dailyDays, todayLabel, daysInMonth) {
   var totalPlan = data.totals && data.totals.plan ? data.totals.plan : {};
   var dailyPlanAtelie = totalPlan.atelie ? Math.round(totalPlan.atelie / daysInMonth) : 0;
 
+  // Заголовок: "Сегодня" / "Вчера" / "24 мар, пн"
+  var WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  var nowDay = now.getDate();
+  var nowMonth = now.getMonth() + 1;
+  var dayTitle;
+  if (today === nowDay && curMonth === nowMonth) {
+    dayTitle = 'Сегодня ' + today + ' ' + MONTH_NAMES[curMonth].substring(0,3);
+  } else if (today === nowDay - 1 && curMonth === nowMonth) {
+    dayTitle = 'Вчера ' + today + ' ' + MONTH_NAMES[curMonth].substring(0,3);
+  } else {
+    var selYear = parseInt(document.getElementById('bizYearSelect').value) || now.getFullYear();
+    var wd = new Date(selYear, curMonth - 1, today).getDay();
+    dayTitle = today + ' ' + MONTH_NAMES[curMonth].substring(0,3) + ', ' + WEEKDAY_SHORT[wd];
+  }
+
   var reported = 0;
   var totalToday = 0;
   var html = '<div class="card" style="border-radius:16px;padding:14px;margin-bottom:12px;">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
-  html += '<div style="font-size:14px;font-weight:800;">&#x1F4CB; Сегодня ' + today + ' ' + MONTH_NAMES[curMonth].substring(0,3) + '</div>';
+  html += '<div style="font-size:14px;font-weight:800;">&#x1F4CB; ' + dayTitle + '</div>';
   html += '<div id="todayReportCount" style="font-size:11px;color:#888;"></div>';
   html += '</div>';
 
@@ -1890,6 +1979,15 @@ function _renderTodayBlock(el, data, dailyDays, todayLabel, daysInMonth) {
       html += '<div style="width:60px;text-align:right;font-size:10px;color:#DDD;">план ' + fmtShort(it.plan) + '</div>';
       html += '<div style="width:55px;"></div>';
     }
+    html += '</div>';
+  }
+
+  // Алерт: кто не сдал отчёт
+  var notReported = items.filter(function(it) { return !it.hasReport; }).map(function(it) { return it.name; });
+  if (notReported.length > 0) {
+    html += '<div style="margin-top:8px;padding:10px 12px;background:#FFF5F5;border:1px solid #FED7D7;border-radius:10px;">';
+    html += '<div style="font-size:12px;font-weight:700;color:#E53E3E;margin-bottom:4px;">Нет отч\u0451та за ' + today + ' ' + MONTH_NAMES[curMonth].substring(0,3) + ':</div>';
+    html += '<div style="font-size:12px;color:#C53030;">' + notReported.join(', ') + '</div>';
     html += '</div>';
   }
 
