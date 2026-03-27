@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=26">
+<link rel="stylesheet" href="css/app.css?v=27">
 <title>DressCode · Дашборд</title>
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var CLEAN_KEY='dc_cleaned_v26';
+  var CLEAN_KEY='dc_cleaned_v27';
   if(localStorage.getItem(CLEAN_KEY)) return;
   var needsClean=false;
   if('serviceWorker' in navigator){
@@ -83,8 +83,11 @@
     <button class="biz-date-today" onclick="bizNavToday()">Сегодня</button>
   </div>
   <div class="biz-day-nav" id="bizDayNav">
-    <span class="biz-day-label" id="bizDayLabel">Сегодня</span>
+    <button class="biz-day-arrow" onclick="bizSnapDay(-1)">&larr;</button>
+    <span class="biz-day-label" id="bizDayLabel" onclick="bizSnapToday()">Сегодня</span>
+    <button class="biz-day-arrow" id="bizDayRight" onclick="bizSnapDay(1)">&rarr;</button>
   </div>
+  <div id="todayReportCard" style="display:none;"></div>
   <div id="bizLoading"><div class="loading-box"><div class="spinner"></div><p>Загрузка филиалов...</p></div></div>
   <div id="bizError" style="display:none;"></div>
   <div id="bizOverviewContent" style="display:none;">
@@ -106,7 +109,6 @@
       <div class="progress-wrap"><div class="progress-fill" id="ov-progress" style="width:0%">0%</div></div>
     </div>
   </div>
-  <div id="todayReportCard" style="display:none;"></div>
   <div id="filialsGrid"></div>
   <div id="dailyPulseCard" style="display:none;"></div>
   <div id="plannerCard" style="display:none;"></div>
@@ -232,12 +234,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=26"></script>
-<script src="js/weather.js?v=26"></script>
-<script src="js/payments.js?v=26"></script>
-<script src="js/agents.js?v=26"></script>
-<script src="js/tasks.js?v=26"></script>
-<script src="js/business.js?v=26"></script>
-<script src="js/daily.js?v=26"></script>
+<script src="js/app.js?v=28"></script>
+<script src="js/weather.js?v=27"></script>
+<script src="js/payments.js?v=27"></script>
+<script src="js/agents.js?v=27"></script>
+<script src="js/tasks.js?v=27"></script>
+<script src="js/business.js?v=27"></script>
+<script src="js/daily.js?v=27"></script>
 </body>
 </html>

@@ -193,6 +193,7 @@ function applyBranchData(data, month) {
   document.getElementById('bizError').style.display = 'none';
   if (typeof renderBizOverview === 'function') renderBizOverview(data);
   if (typeof renderFilials === 'function') renderFilials(data);
+  if (typeof renderPaymentsTab === 'function') renderPaymentsTab();
   // Save daily snapshot
   if (!bizIsHistorical) {
     var ySel = document.getElementById('bizYearSelect');
@@ -361,6 +362,31 @@ function getMonthKey(dateStr) {
   if (!isNaN(d.getTime())) return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   return '';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// CACHE MIGRATION — сброс устаревших кешей без plan.clients
+// ═══════════════════════════════════════════════════════════════
+(function migrateCache() {
+  try {
+    var raw = localStorage.getItem(CACHE_KEY);
+    if (raw) {
+      var c = JSON.parse(raw);
+      if (c.branches && c.branches.totals && c.branches.totals.plan && !c.branches.totals.plan.clients) {
+        localStorage.removeItem(CACHE_KEY);
+      }
+    }
+    // Also clear old branch caches without clients
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('branches_') === 0) {
+        var bc = JSON.parse(localStorage.getItem(k));
+        if (bc && bc.data && bc.data.totals && bc.data.totals.plan && !bc.data.totals.plan.clients) {
+          localStorage.removeItem(k);
+        }
+      }
+    }
+  } catch(e) {}
+})();
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
