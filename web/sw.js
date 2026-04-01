@@ -1,15 +1,15 @@
-const CACHE_NAME = 'dresscode-v26';
+const CACHE_NAME = 'dresscode-v27';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './css/app.css?v=26',
-  './js/app.js?v=26',
-  './js/weather.js?v=26',
-  './js/business.js?v=26',
-  './js/payments.js?v=26',
-  './js/tasks.js?v=26',
-  './js/agents.js?v=26',
-  './js/daily.js?v=26',
+  './css/app.css?v=27',
+  './js/app.js?v=27',
+  './js/weather.js?v=27',
+  './js/business.js?v=27',
+  './js/payments.js?v=27',
+  './js/tasks.js?v=27',
+  './js/agents.js?v=27',
+  './js/daily.js?v=27',
   './agents-config.json',
   './manifest.json'
 ];

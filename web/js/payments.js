@@ -31,16 +31,25 @@ var RENT_ITEMS = [
 
 // ── STORAGE (localStorage как кэш, Sheets как источник правды) ──
 var _paymentsLoaded = false;
+var _paymentsLoadedMonth = '';
 var _paymentsSaving = false;
 
+function getSelectedMonth() {
+  var sel = document.getElementById('bizMonthSelect');
+  return sel ? parseInt(sel.value) : new Date().getMonth() + 1;
+}
+
+function getSelectedYear() {
+  var sel = document.getElementById('bizYearSelect');
+  return sel ? parseInt(sel.value) : new Date().getFullYear();
+}
+
 function getPaymentsKey(prefix) {
-  var now = new Date();
-  return (prefix || 'dresscode_payments') + '_' + now.getFullYear() + '-' + (now.getMonth() + 1);
+  return (prefix || 'dresscode_payments') + '_' + getSelectedYear() + '-' + getSelectedMonth();
 }
 
 function getCurrentYearMonth() {
-  var now = new Date();
-  return now.getFullYear() + '-' + (now.getMonth() + 1);
+  return getSelectedYear() + '-' + getSelectedMonth();
 }
 
 function getPaymentsData(prefix) {
@@ -60,6 +69,7 @@ function loadPaymentsFromSheets() {
     .then(function(resp) {
       if (!resp.success) return;
       _paymentsLoaded = true;
+      _paymentsLoadedMonth = getCurrentYearMonth();
       // Записываем данные из Sheets в localStorage (как кэш)
       if (resp.credits && Object.keys(resp.credits).length > 0) {
         savePaymentsData(resp.credits, 'dresscode_payments');
@@ -145,8 +155,7 @@ function toggleSubrentPayment(idx, method) {
 
 // ── EXTRA INCOME TOGGLE ──
 function getExtraIncomeKey() {
-  var now = new Date();
-  return 'dresscode_extra_income_' + now.getFullYear() + '-' + (now.getMonth() + 1);
+  return 'dresscode_extra_income_' + getSelectedYear() + '-' + getSelectedMonth();
 }
 
 function isExtraIncomeReceived() {
@@ -257,12 +266,18 @@ function renderPaymentsTab() {
   var monthEl = document.getElementById('paymentsMonthName');
   if (!el) return;
 
-  // Загружаем данные из Sheets при первом рендере
-  if (!_paymentsLoaded) loadPaymentsFromSheets();
+  // Загружаем данные из Sheets при первом рендере или смене месяца
+  var currentYM = getCurrentYearMonth();
+  if (!_paymentsLoaded || _paymentsLoadedMonth !== currentYM) {
+    _paymentsLoaded = false;
+    loadPaymentsFromSheets();
+  }
 
+  var cm = getSelectedMonth();
   var now = new Date();
-  var cm = now.getMonth() + 1;
-  var today = now.getDate();
+  var selYear = getSelectedYear();
+  var isCurrentMonth = (selYear === now.getFullYear() && cm === now.getMonth() + 1);
+  var today = isCurrentMonth ? now.getDate() : 0;
   if (monthEl) monthEl.textContent = MONTH_NAMES[cm];
 
   var creditPayData = getPaymentsData('dresscode_payments');
