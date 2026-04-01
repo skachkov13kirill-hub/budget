@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED (2026-04-01) — НЕ ИСПОЛЬЗУЕТСЯ
+Активный модуль: sheets_api.py (HTTP через Apps Script)
+Этот файл оставлен для справки, не импортируется нигде.
+
 📊 sheets_direct.py — Прямая работа с Google Sheets через gspread
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Заменяет цепочку: sheets_post → Apps Script → Google Sheets

@@ -42,13 +42,20 @@ async def sheets_post(action, data):
         logger.error(f"sheets_post error: {e}")
         return None
 
-async def write_branch_daily(branch: str, turnover: int, clients: int) -> dict:
-    return await sheets_post('writeBranchDaily', {
+async def write_branch_daily(branch: str, turnover: int, clients: int, cash: int = 0, card: int = 0, hc_atelie: int = 0, hc_clients: int = 0, hc_cash: int = 0, hc_card: int = 0) -> dict:
+    data = {
         'branch': branch,
         'date': get_today_str(),
         'atelie': turnover,
-        'clients': clients
-    })
+        'clients': clients,
+        'cash': cash,
+        'card': card,
+    }
+    if hc_atelie: data['hcAtelie'] = hc_atelie
+    if hc_clients: data['hcClients'] = hc_clients
+    if hc_cash: data['hcCash'] = hc_cash
+    if hc_card: data['hcCard'] = hc_card
+    return await sheets_post('writeBranchDaily', data)
 
 async def get_branches_data(date: str = None, period: str = None) -> dict:
     """Получает данные по всем филиалам. Опционально за конкретную дату/период."""
