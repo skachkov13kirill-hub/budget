@@ -84,6 +84,9 @@ function renderDailyChart(data) {
     var isToday = i === days.length - 1;
     var isWeekend = d.weekday === 0 || d.weekday === 6;
     var abovePlan = d.atelie >= plan.dailyAtelie;
+    var missingBranches = (d.branches || []).filter(function(br) { return br.atelie === 0 && br.clients === 0; });
+    var hasMissing = missingBranches.length > 0;
+    var sumColor = hasMissing ? '#EF4444' : (abovePlan ? '#22C55E' : '#333');
 
     var barColor = abovePlan ? '#6C5CE7' : '#A29BFE';
     var clientColor = '#00B894';
@@ -100,7 +103,7 @@ function renderDailyChart(data) {
     if (isToday) html += ' <span style="font-size:10px;color:#6C5CE7;">сегодня</span>';
     html += '</div>';
     html += '<div style="text-align:right;">';
-    html += '<span style="font-size:14px;font-weight:700;color:' + (abovePlan ? '#22C55E' : '#333') + ';">' + fmtShort(d.atelie) + '</span>';
+    html += '<span style="font-size:14px;font-weight:700;color:' + sumColor + ';">' + fmtShort(d.atelie) + '</span>';
     html += '<span style="font-size:11px;color:#888;margin-left:8px;">' + d.clients + ' кл</span>';
     html += '</div>';
     html += '</div>';
@@ -250,6 +253,24 @@ function toggleDailyDetail(dayIndex) {
     html += '</div>';
     html += '<div style="width:65px;text-align:right;font-size:12px;font-weight:600;">' + fmtShort(br.atelie) + '</div>';
     html += '<div style="width:35px;text-align:right;font-size:11px;color:#888;">' + br.clients + ' кл</div>';
+    html += '</div>';
+  }
+
+  // ── Химчистка (сумма столбца G по всем филиалам) ──
+  var hcTotal = d.himchistka || 0;
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:6px;border-top:1px dashed #E5E7EB;">';
+  html += '<div style="font-size:11px;color:#888;font-weight:500;">ХЧ</div>';
+  html += '<div style="flex:1;font-size:12px;color:#666;">Химчистка</div>';
+  html += '<div style="font-size:12px;font-weight:600;color:' + (hcTotal > 0 ? '#6C5CE7' : '#CCC') + ';">' + fmtShort(hcTotal) + '</div>';
+  html += '</div>';
+
+  // ── Не сдали отчёт ──
+  var missing = (d.branches || []).filter(function(br) { return br.atelie === 0 && br.clients === 0; });
+  if (missing.length > 0) {
+    var missingCodes = missing.map(function(br) { return br.code; }).join(', ');
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+    html += '<div style="font-size:11px;color:#EF4444;font-weight:600;">!</div>';
+    html += '<div style="flex:1;font-size:11px;color:#EF4444;">Не сдали: ' + missingCodes + '</div>';
     html += '</div>';
   }
 

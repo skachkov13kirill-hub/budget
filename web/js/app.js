@@ -31,7 +31,7 @@ var familyData = {
 // ═══════════════════════════════════════════════════════════════
 // CACHE — localStorage с TTL
 // ═══════════════════════════════════════════════════════════════
-function loadCache() {
+function loadCache(skipTTL) {
   try {
     var raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -39,7 +39,7 @@ function loadCache() {
     // Проверяем что кэш для текущего месяца
     var now = new Date();
     if (c.cacheMonth && (c.cacheMonth !== now.getMonth() + 1 || c.cacheYear !== now.getFullYear())) return null;
-    if (Date.now() - c.updatedAt > CACHE_TTL) return null;
+    if (!skipTTL && Date.now() - c.updatedAt > CACHE_TTL) return null;
     return c;
   } catch(e) { return null; }
 }
@@ -406,8 +406,8 @@ window.onload = function() {
   var ySel = document.getElementById('bizYearSelect');
   if (ySel) ySel.value = now.getFullYear();
 
-  // Show cached state if fresh
-  var cached = loadCache();
+  // Show cached state immediately (ignore TTL for instant start)
+  var cached = loadCache(true);
   if (cached) {
     state = cached;
     renderAll();
@@ -434,4 +434,26 @@ window.onload = function() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(e) { console.log('SW:', e); });
   }
+
+  // Offline/Online indicator
+  function updateOnlineStatus() {
+    var sub = document.getElementById('headerSubtitle');
+    if (!navigator.onLine) {
+      sub.textContent = 'Офлайн \u00b7 данные из кеша';
+      sub.style.color = '#EF4444';
+    } else if (state.updatedAt) {
+      sub.style.color = '';
+      showLastUpdate();
+    }
+  }
+  window.addEventListener('online', function() {
+    updateOnlineStatus();
+    showToast('Онлайн — обновляю данные');
+    refreshAll();
+  });
+  window.addEventListener('offline', function() {
+    updateOnlineStatus();
+    showToast('Нет сети — работаю из кеша');
+  });
+  updateOnlineStatus();
 };
