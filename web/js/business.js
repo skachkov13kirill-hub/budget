@@ -25,78 +25,64 @@ function renderBizOverview(data) {
   var daysWithData = isCurrentMonth ? Math.max(1, now.getDate() - 1) : daysInMonth;
   var dayRatio = daysWithData / daysInMonth; // доля месяца с данными
 
-  document.getElementById('ov-atelie').textContent = fmt(t.fact.atelie);
-  document.getElementById('ov-himch').textContent = fmt(t.fact.avgCheck || 0);
-  document.getElementById('ov-clients').textContent = t.fact.clients.toLocaleString('ru-RU');
-
   // Химчистка — суммируем из филиалов (надёжнее чем totals)
   var himchFact = 0;
   if (data.filials) data.filials.forEach(function(f) { himchFact += (f.fact.himchistka || 0); });
   if (!himchFact) himchFact = t.fact.himchistka || 0;
+
+  // Общий оборот = ателье + химчистка
+  var totalWithHimch = (t.fact.atelie || 0) + (t.fact.himchistka || 0);
+  var totalOborot = (t.fact.atelie || 0) + himchFact;
+
+  // ── Оборот ──
+  document.getElementById('ov-oborot').textContent = fmt(totalOborot);
+  var planTotal = (t.plan && t.plan.total) ? t.plan.total : 0;
+  if (planTotal > 0) {
+    var planTotalToday = Math.round(planTotal * dayRatio);
+    var pctOborot = planTotalToday > 0 ? Math.round(totalOborot / planTotalToday * 100) : 0;
+    var oborotStatus = pctOborot >= 100 ? '\u2705' : pctOborot >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    document.getElementById('ov-oborot-plan').textContent = isCurrentMonth
+      ? oborotStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planTotalToday) + ' (' + pctOborot + '%)'
+      : 'План: ' + fmtShort(planTotal) + ' (' + (t.performance.total || 0) + '%)';
+  } else {
+    document.getElementById('ov-oborot-plan').textContent = '';
+  }
+
+  // ── Ателье ──
+  document.getElementById('ov-atelie').textContent = fmt(t.fact.atelie);
+  if (t.plan && t.plan.total > 0) {
+    var planAtelieToday = Math.round((t.plan.atelie || 0) * dayRatio);
+    var pctAtelieToday = planAtelieToday > 0 ? Math.round(t.fact.atelie / planAtelieToday * 100) : 0;
+    var atelieStatus = pctAtelieToday >= 100 ? '\u2705' : pctAtelieToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
+    document.getElementById('ov-atelie-plan').textContent = isCurrentMonth
+      ? atelieStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
+      : 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
+  }
+
+  // ── Химчистка (одно поле) ──
   document.getElementById('ov-himch-fact').textContent = fmt(himchFact);
   var himchPlan = (t.plan && t.plan.himchistka) ? t.plan.himchistka : 0;
+  var himchSharePct = totalOborot > 0 ? Math.round(himchFact / totalOborot * 100) : 0;
   if (himchPlan > 0) {
     var planHimchToday = Math.round(himchPlan * dayRatio);
     var pctHimch = planHimchToday > 0 ? Math.round(himchFact / planHimchToday * 100) : 0;
     var himchStatus = pctHimch >= 100 ? '\u2705' : pctHimch >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
     document.getElementById('ov-himch-sub').textContent = isCurrentMonth
-      ? himchStatus + ' план ' + daysWithData + '\u0434: ' + fmtShort(planHimchToday) + ' (' + pctHimch + '%)'
-      : '\u041F\u043B\u0430\u043D: ' + fmtShort(himchPlan) + ' (' + (t.performance.himchistka || 0) + '%)';
+      ? himchStatus + ' ' + himchSharePct + '% об. \u00b7 план ' + fmtShort(planHimchToday) + ' (' + pctHimch + '%)'
+      : himchSharePct + '% об. \u00b7 План: ' + fmtShort(himchPlan) + ' (' + (t.performance.himchistka || 0) + '%)';
   } else {
-    document.getElementById('ov-himch-sub').textContent = '';
+    document.getElementById('ov-himch-sub').textContent = himchSharePct + '% оборота';
   }
 
-  // «На счетах» — цель = аренда + кредиты (сколько нужно накопить к концу месяца)
-  var RENT_TOTAL = 419062; // сумма аренд по филиалам
-  var creditsTotal = 0;
-  if (state.credits) state.credits.forEach(function(cr) {
-    if (cr.status !== '\u0417\u0430\u043C\u043E\u0440\u043E\u0436\u0435\u043D') creditsTotal += (parseFloat(cr.payment) || 0);
-  });
-  var ACCOUNT_TARGET = RENT_TOTAL + creditsTotal;
-  var TAILOR_SHARE = 0.5;    // 50% выручки уходит портным
-  var PERSONAL_DAILY = 10000; // 10К/день личные расходы
-  var totalWithHimch = (t.fact.atelie || 0) + (t.fact.himchistka || 0);
-
-  if (isCurrentMonth && data.filials) {
-    var daysLeft = daysInMonth - now.getDate();
-    var netFc = calcNetworkForecast(data.filials);
-    var remainingRevenue = Math.max(0, netFc - (t.fact.total || totalWithHimch));
-    var futureNet = remainingRevenue * TAILOR_SHARE - daysLeft * PERSONAL_DAILY;
-    var targetNow = Math.round(ACCOUNT_TARGET - futureNet);
-    document.getElementById('ov-total').textContent = fmtShort(targetNow);
-    var targetStatus = targetNow <= 0 ? '\u2705' : targetNow < 500000 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-    document.getElementById('ov-total-plan').textContent = targetStatus + ' цель ' + fmtShort(ACCOUNT_TARGET);
+  // ── Клиенты · Чек ──
+  var avgCheck = t.fact.avgCheck || 0;
+  var clients = t.fact.clients || 0;
+  document.getElementById('ov-clients-check').textContent = clients + ' кл \u00b7 ' + fmt(avgCheck);
+  var avgCheckPlan = (t.plan && t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
+  if (avgCheckPlan > 0) {
+    document.getElementById('ov-clients-check-sub').textContent = 'план чека: ' + fmt(avgCheckPlan);
   } else {
-    document.getElementById('ov-total').textContent = fmt(t.fact.total || totalWithHimch);
-    document.getElementById('ov-total-plan').textContent = t.plan.total > 0
-      ? '\u041F\u043B\u0430\u043D: ' + fmtShort(t.plan.total) + ' (' + t.performance.total + '%)' : '';
-  }
-
-  if (t.plan.total > 0) {
-    // План на текущий день (пропорционально)
-    var planAtelieToday = Math.round((t.plan.atelie || 0) * dayRatio);
-    var pctAtelieToday = planAtelieToday > 0 ? Math.round(t.fact.atelie / planAtelieToday * 100) : 0;
-
-    var atelieStatus = pctAtelieToday >= 100 ? '\u2705' : pctAtelieToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-
-    document.getElementById('ov-atelie-plan').textContent = isCurrentMonth
-      ? atelieStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
-      : 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
-
-    // Средний чек: план = план ателье / план клиентов
-    var avgCheckPlan = (t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
-    document.getElementById('ov-himch-plan').textContent = avgCheckPlan > 0 ? 'план ' + fmt(avgCheckPlan) : t.fact.clients + ' кл';
-  }
-  // Клиенты: план на текущий день + факт
-  if (t.plan && t.plan.clients > 0) {
-    var planClientsToday = Math.round(t.plan.clients * dayRatio);
-    var pctClientsToday = planClientsToday > 0 ? Math.round(t.fact.clients / planClientsToday * 100) : 0;
-    var clientsStatus = pctClientsToday >= 100 ? '\u2705' : pctClientsToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-    document.getElementById('ov-avg-check').textContent = isCurrentMonth
-      ? clientsStatus + ' план ' + daysWithData + 'д: ' + planClientsToday + ' (' + pctClientsToday + '%)'
-      : 'план ' + t.plan.clients + ' \u00b7 ' + t.performance.total + '%';
-  } else if (t.fact.avgCheck) {
-    document.getElementById('ov-avg-check').textContent = 'Ср.чек: ' + fmt(t.fact.avgCheck);
+    document.getElementById('ov-clients-check-sub').textContent = '';
   }
 
   // Прогресс-бар: по плану на текущий день
@@ -142,6 +128,134 @@ function renderBizOverview(data) {
 
   // Планировщик — 4 цифры маржи
   renderPlanner(data);
+
+  // Аномалии — 6-й блок «Контроль»
+  detectAnomalies(data);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANOMALIES — детектор аномалий
+// ═══════════════════════════════════════════════════════════════
+var lastAnomalies = [];
+
+function detectAnomalies(data) {
+  var anomalies = [];
+  if (!data || !data.filials) {
+    updateAnomalyBadge(anomalies);
+    return;
+  }
+
+  var now = new Date();
+  var month = data.currentMonth || (now.getMonth() + 1);
+  var yearSel = document.getElementById('bizYearSelect');
+  var year = yearSel ? parseInt(yearSel.value) : now.getFullYear();
+  var isCurrentMonth = (now.getMonth() + 1) === month && now.getFullYear() === year;
+  var daysInMonth = new Date(year, month, 0).getDate();
+  var daysWithData = isCurrentMonth ? Math.max(1, now.getDate() - 1) : daysInMonth;
+
+  data.filials.forEach(function(f) {
+    // 🔴 Не сдал отчёт (текущий месяц, 0 клиентов и 0 выручка)
+    if (isCurrentMonth && f.fact.atelie === 0 && f.fact.clients === 0 && daysWithData > 1) {
+      anomalies.push({ severity: 'red', filial: f.name, code: f.code, message: 'Нет данных за весь месяц', type: 'no_data' });
+    }
+
+    // 🟡 Выполнение < 50%
+    if (f.performance && f.performance.total < 50 && f.plan && f.plan.total > 0 && daysWithData > 5) {
+      anomalies.push({ severity: 'yellow', filial: f.name, code: f.code, message: 'Выполнение ' + f.performance.total + '% — критически низко', type: 'low_perf' });
+    }
+
+    // 🟡 Средний чек < 500₽ (если есть клиенты)
+    if (f.fact.clients > 10 && f.fact.avgCheck > 0 && f.fact.avgCheck < 500) {
+      anomalies.push({ severity: 'yellow', filial: f.name, code: f.code, message: 'Ср. чек ' + fmt(f.fact.avgCheck) + ' — подозрительно низкий', type: 'low_check' });
+    }
+
+    // 🟡 Средний чек > 5000₽ (ошибка?)
+    if (f.fact.clients > 5 && f.fact.avgCheck > 5000) {
+      anomalies.push({ severity: 'yellow', filial: f.name, code: f.code, message: 'Ср. чек ' + fmt(f.fact.avgCheck) + ' — подозрительно высокий', type: 'high_check' });
+    }
+
+    // 🟡 Химчистка = 0 при плане > 0
+    if (f.plan && f.plan.himchistka > 0 && (f.fact.himchistka || 0) === 0 && daysWithData > 5) {
+      anomalies.push({ severity: 'yellow', filial: f.name, code: f.code, message: 'Химчистка 0₽ при плане ' + fmtShort(f.plan.himchistka), type: 'no_himch' });
+    }
+  });
+
+  // Дневные аномалии из dailyChart (если данные загружены)
+  if (typeof dailyChartData !== 'undefined' && dailyChartData && dailyChartData.days) {
+    dailyChartData.days.forEach(function(d) {
+      if (!d.branches) return;
+      d.branches.forEach(function(br) {
+        if (br.clients > 30) {
+          anomalies.push({ severity: 'red', filial: br.code, code: br.code, message: d.date + ': ' + br.clients + ' клиентов — аномально много', type: 'daily_clients' });
+        }
+        if (br.atelie > 30000) {
+          anomalies.push({ severity: 'red', filial: br.code, code: br.code, message: d.date + ': ' + fmtShort(br.atelie) + ' выручка — аномально высокая', type: 'daily_revenue' });
+        }
+      });
+    });
+  }
+
+  // Сортировка: red сначала
+  anomalies.sort(function(a, b) {
+    if (a.severity === 'red' && b.severity !== 'red') return -1;
+    if (a.severity !== 'red' && b.severity === 'red') return 1;
+    return 0;
+  });
+
+  lastAnomalies = anomalies;
+  updateAnomalyBadge(anomalies);
+}
+
+function updateAnomalyBadge(anomalies) {
+  var el = document.getElementById('ov-anomalies');
+  var sub = document.getElementById('ov-anomalies-sub');
+  if (!el) return;
+
+  var reds = anomalies.filter(function(a) { return a.severity === 'red'; }).length;
+  var yellows = anomalies.filter(function(a) { return a.severity === 'yellow'; }).length;
+  var total = anomalies.length;
+
+  if (total === 0) {
+    el.textContent = '\u2705';
+    el.style.color = '#22C55E';
+    sub.textContent = 'всё ок';
+  } else {
+    el.textContent = total;
+    el.style.color = reds > 0 ? '#EF4444' : '#FFAA00';
+    var parts = [];
+    if (reds > 0) parts.push('\uD83D\uDD34 ' + reds);
+    if (yellows > 0) parts.push('\uD83D\uDFE1 ' + yellows);
+    sub.textContent = parts.join(' \u00b7 ');
+  }
+}
+
+function openAnomalies() {
+  var overlay = getOverlay('anomaliesOverlay');
+  var anomalies = lastAnomalies;
+
+  var html = '<div class="overlay-handle"></div>' +
+    '<div style="font-size:18px;font-weight:700;padding:16px 0 12px;text-align:center;">\u26A0\uFE0F Контроль — аномалии</div>';
+
+  if (anomalies.length === 0) {
+    html += '<div style="text-align:center;padding:40px;color:#22C55E;font-size:16px;">\u2705 Аномалий не обнаружено</div>';
+  } else {
+    anomalies.forEach(function(a) {
+      var icon = a.severity === 'red' ? '\uD83D\uDD34' : '\uD83D\uDFE1';
+      var bgColor = a.severity === 'red' ? '#FEF2F2' : '#FFFBEB';
+      var borderColor = a.severity === 'red' ? '#FECACA' : '#FDE68A';
+      html += '<div style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:10px;padding:10px 14px;margin:0 0 6px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<span style="font-size:14px;">' + icon + '</span>' +
+          '<span style="font-weight:600;font-size:13px;color:#333;">' + a.filial + '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:#666;margin-top:4px;padding-left:22px;">' + a.message + '</div>' +
+      '</div>';
+    });
+  }
+
+  html += '<div class="overlay-close" onclick="closeOverlay(\'anomaliesOverlay\')">Закрыть</div>';
+  overlay.querySelector('.overlay-panel').innerHTML = html;
+  showOverlay('anomaliesOverlay');
 }
 
 // ── DAILY PULSE (две базы: доходы и расходы) ──
@@ -852,22 +966,46 @@ function renderFilials(data) {
 // ── FILIAL DETAIL OVERLAY ── (moved to bottom of file, enhanced version)
 
 function loadBranchDailyData(f, month, zoneColor) {
-  fetchWithTimeout(API_ATELIE + '?action=getBranchDaily&code=' + f.code + '&month=' + month + '&year=' + (document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear()), 10000)
+  // Используем getDailyChart (42 дня = ~6 недель) и фильтруем по филиалу
+  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=42', 15000)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data && data.success && data.days && data.days.length >= 3) {
-        var weeks = buildWeeksFromDays(data.days, month);
-        var el = document.getElementById('weekRevChart');
-        if (el) el.innerHTML = renderWeekBars(weeks, zoneColor);
-      } else {
-        var el = document.getElementById('weekRevChart');
-        if (el) el.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--text-3);padding:20px;">Посуточные данные недоступны</div>';
+      if (!data || !data.success || !data.days || data.days.length < 3) {
+        showBranchDataEmpty();
+        return;
       }
+      // Извлекаем данные конкретного филиала из каждого дня
+      var year = document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear();
+      var branchDays = data.days.map(function(d) {
+        var br = (d.branches || []).find(function(b) { return b.code === f.code; });
+        // Дата формата "06.03" (DD.MM) → ISO "2026-03-06"
+        var dd = d.date.substring(0, 2);
+        var mm = d.date.substring(3, 5);
+        return {
+          date: year + '-' + mm + '-' + dd,
+          total: br ? (br.atelie || 0) : 0,
+          clients: br ? (br.clients || 0) : 0
+        };
+      }).filter(function(d) { return d.total > 0 || d.clients > 0; });
+
+      if (branchDays.length < 3) {
+        showBranchDataEmpty();
+        return;
+      }
+      var weeks = buildWeeksFromDays(branchDays, month);
+      var el = document.getElementById('weekRevChart');
+      if (el) el.innerHTML = renderWeekBars(weeks, zoneColor);
+      var analyticsEl = document.getElementById('branchAnalytics');
+      if (analyticsEl) analyticsEl.innerHTML = renderBranchAnalytics(weeks);
     })
     .catch(function() {
-      var el = document.getElementById('weekRevChart');
-      if (el) el.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--text-3);padding:20px;">Не удалось загрузить</div>';
+      showBranchDataEmpty();
     });
+}
+
+function showBranchDataEmpty() {
+  var el = document.getElementById('weekRevChart');
+  if (el) el.innerHTML = '<div style="text-align:center;font-size:12px;color:var(--text-3);padding:20px;">Посуточные данные недоступны</div>';
 }
 
 function buildWeeksFromDays(days, month) {
@@ -887,9 +1025,12 @@ function buildWeeksFromDays(days, month) {
   return keys.map(function(key, i) {
     var w = weekMap[key];
     var check = w.clients > 0 ? Math.round(w.total / w.clients) : 0;
-    var prev = i > 0 ? weekMap[keys[i - 1]].total : null;
-    var pct = prev && prev > 0 ? Math.round((w.total / prev - 1) * 100) : null;
-    return { label: 'Нед ' + (i + 1), val: w.total, check: check, pct: pct };
+    var prev = i > 0 ? weekMap[keys[i - 1]] : null;
+    var pct = prev && prev.total > 0 ? Math.round((w.total / prev.total - 1) * 100) : null;
+    var pctClients = prev && prev.clients > 0 ? Math.round((w.clients / prev.clients - 1) * 100) : null;
+    var prevCheck = prev && prev.clients > 0 ? Math.round(prev.total / prev.clients) : 0;
+    var pctCheck = prevCheck > 0 ? Math.round((check / prevCheck - 1) * 100) : null;
+    return { label: 'Нед ' + (i + 1), val: w.total, check: check, clients: w.clients, days: w.days, pct: pct, pctClients: pctClients, pctCheck: pctCheck };
   });
 }
 
@@ -909,6 +1050,75 @@ function renderWeekBars(weeks, color) {
         '<div style="font-size:7px;color:#666;">' + Math.round(w.val / 1000) + '\u041A</div>' +
         '<div style="font-size:7px;color:#888;">' + w.label + '</div></div>';
     }).join('') + '</div>';
+}
+
+// ── BRANCH ANALYTICS — тренды за 6 недель ──
+function renderBranchAnalytics(weeks) {
+  if (!weeks || weeks.length < 2) return '';
+
+  var html = '<div class="filial-detail-section" style="margin-top:12px;">' +
+    '<div class="filial-detail-section-title">\uD83D\uDCCA Тренды за ' + weeks.length + ' недель</div>';
+
+  // Тренд-индикаторы (последняя vs первая неделя)
+  var first = weeks[0];
+  var last = weeks[weeks.length - 1];
+  var trendVal = first.val > 0 ? Math.round((last.val / first.val - 1) * 100) : 0;
+  var trendCl = first.clients > 0 ? Math.round((last.clients / first.clients - 1) * 100) : 0;
+  var trendChk = first.check > 0 ? Math.round((last.check / first.check - 1) * 100) : 0;
+
+  function trendArrow(pct) {
+    if (pct > 5) return '\u2191';
+    if (pct < -5) return '\u2193';
+    return '\u2192';
+  }
+  function trendColor(pct) {
+    if (pct > 5) return '#22C55E';
+    if (pct < -5) return '#EF4444';
+    return '#888';
+  }
+  function trendSign(pct) { return pct > 0 ? '+' + pct + '%' : pct + '%'; }
+
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+  html += '<div style="flex:1;background:#F8F7FF;border-radius:8px;padding:8px;text-align:center;">' +
+    '<div style="font-size:10px;color:#888;">Выручка</div>' +
+    '<div style="font-size:18px;font-weight:700;color:' + trendColor(trendVal) + ';">' + trendArrow(trendVal) + ' ' + trendSign(trendVal) + '</div></div>';
+  html += '<div style="flex:1;background:#F0FFF4;border-radius:8px;padding:8px;text-align:center;">' +
+    '<div style="font-size:10px;color:#888;">Клиенты</div>' +
+    '<div style="font-size:18px;font-weight:700;color:' + trendColor(trendCl) + ';">' + trendArrow(trendCl) + ' ' + trendSign(trendCl) + '</div></div>';
+  html += '<div style="flex:1;background:#FFF7ED;border-radius:8px;padding:8px;text-align:center;">' +
+    '<div style="font-size:10px;color:#888;">Ср. чек</div>' +
+    '<div style="font-size:18px;font-weight:700;color:' + trendColor(trendChk) + ';">' + trendArrow(trendChk) + ' ' + trendSign(trendChk) + '</div></div>';
+  html += '</div>';
+
+  // Таблица по неделям
+  html += '<div style="overflow-x:auto;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+  html += '<thead><tr style="border-bottom:2px solid #E5E7EB;">' +
+    '<th style="text-align:left;padding:4px 6px;color:#888;">Нед</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">Выручка</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">\u0394</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">Кл</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">\u0394</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">Чек</th>' +
+    '<th style="text-align:right;padding:4px 6px;color:#888;">\u0394</th>' +
+    '</tr></thead><tbody>';
+
+  weeks.forEach(function(w, i) {
+    var isLast = i === weeks.length - 1;
+    var rowBg = isLast ? '#F0EDFF' : (i % 2 === 0 ? '#FAFAFA' : '#FFF');
+    html += '<tr style="background:' + rowBg + ';' + (isLast ? 'font-weight:700;' : '') + '">';
+    html += '<td style="padding:5px 6px;">' + w.label + (w.days < 7 ? ' (' + w.days + 'д)' : '') + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;">' + fmtShort(w.val) + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;color:' + (w.pct !== null ? trendColor(w.pct) : '#CCC') + ';font-size:10px;">' + (w.pct !== null ? trendSign(w.pct) : '\u2014') + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;">' + w.clients + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;color:' + (w.pctClients !== null ? trendColor(w.pctClients) : '#CCC') + ';font-size:10px;">' + (w.pctClients !== null ? trendSign(w.pctClients) : '\u2014') + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;">' + fmt(w.check) + '</td>';
+    html += '<td style="text-align:right;padding:5px 6px;color:' + (w.pctCheck !== null ? trendColor(w.pctCheck) : '#CCC') + ';font-size:10px;">' + (w.pctCheck !== null ? trendSign(w.pctCheck) : '\u2014') + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div></div>';
+  return html;
 }
 
 // ── NETWORK DETAIL OVERLAY (Enhanced) ──
@@ -1723,6 +1933,9 @@ function openFilialDetail(f, month) {
     '<div class="filial-detail-section-title">&#x1F4C8; Выручка по неделям</div>' +
     '<div id="weekRevChart"><div class="loading-box" style="padding:20px;"><div class="spinner"></div></div></div>' +
   '</div>';
+
+  // Deep analytics section
+  html += '<div id="branchAnalytics"></div>';
 
   html += '<div class="overlay-close" onclick="closeOverlay(\'filialOverlay\')">Закрыть</div>';
 
