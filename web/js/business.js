@@ -966,25 +966,23 @@ function renderFilials(data) {
 // ── FILIAL DETAIL OVERLAY ── (moved to bottom of file, enhanced version)
 
 function loadBranchDailyData(f, month, zoneColor) {
-  // Используем getDailyChart (42 дня = ~6 недель) и фильтруем по филиалу
-  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=42', 15000)
+  // Используем getBranchDaily — прямые дневные данные филиала
+  var year = document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear();
+  fetchWithTimeout(API_ATELIE + '?action=getBranchDaily&branch=' + encodeURIComponent(f.code) + '&month=' + month, 15000)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (!data || !data.success || !data.days || data.days.length < 3) {
-        showBranchDataEmpty();
+      if (!data || !data.success || !data.dailyData || data.dailyData.length < 3) {
+        // Фолбэк на старый метод getDailyChart
+        loadBranchDailyDataFallback(f, month, zoneColor);
         return;
       }
-      // Извлекаем данные конкретного филиала из каждого дня
-      var year = document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear();
-      var branchDays = data.days.map(function(d) {
-        var br = (d.branches || []).find(function(b) { return b.code === f.code; });
-        // Дата формата "06.03" (DD.MM) → ISO "2026-03-06"
+      var branchDays = data.dailyData.map(function(d) {
         var dd = d.date.substring(0, 2);
         var mm = d.date.substring(3, 5);
         return {
           date: year + '-' + mm + '-' + dd,
-          total: br ? (br.atelie || 0) : 0,
-          clients: br ? (br.clients || 0) : 0
+          total: d.atelie || 0,
+          clients: d.clients || 0
         };
       }).filter(function(d) { return d.total > 0 || d.clients > 0; });
 
@@ -997,10 +995,65 @@ function loadBranchDailyData(f, month, zoneColor) {
       if (el) el.innerHTML = renderWeekBars(weeks, zoneColor);
       var analyticsEl = document.getElementById('branchAnalytics');
       if (analyticsEl) analyticsEl.innerHTML = renderBranchAnalytics(weeks);
+
+      // Показать дневную таблицу под графиком
+      var dailyEl = document.getElementById('branchDailyTable');
+      if (dailyEl) dailyEl.innerHTML = renderDailyTable(data.dailyData, data.totals);
     })
     .catch(function() {
-      showBranchDataEmpty();
+      loadBranchDailyDataFallback(f, month, zoneColor);
     });
+}
+
+function loadBranchDailyDataFallback(f, month, zoneColor) {
+  fetchWithTimeout(API_ATELIE + '?action=getDailyChart&days=42', 15000)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data || !data.success || !data.days || data.days.length < 3) {
+        showBranchDataEmpty();
+        return;
+      }
+      var year = document.getElementById('bizYearSelect') ? document.getElementById('bizYearSelect').value : new Date().getFullYear();
+      var branchDays = data.days.map(function(d) {
+        var br = (d.branches || []).find(function(b) { return b.code === f.code; });
+        var dd = d.date.substring(0, 2);
+        var mm = d.date.substring(3, 5);
+        return { date: year + '-' + mm + '-' + dd, total: br ? (br.atelie || 0) : 0, clients: br ? (br.clients || 0) : 0 };
+      }).filter(function(d) { return d.total > 0 || d.clients > 0; });
+      if (branchDays.length < 3) { showBranchDataEmpty(); return; }
+      var weeks = buildWeeksFromDays(branchDays, month);
+      var el = document.getElementById('weekRevChart');
+      if (el) el.innerHTML = renderWeekBars(weeks, zoneColor);
+      var analyticsEl = document.getElementById('branchAnalytics');
+      if (analyticsEl) analyticsEl.innerHTML = renderBranchAnalytics(weeks);
+    })
+    .catch(function() { showBranchDataEmpty(); });
+}
+
+function renderDailyTable(dailyData, totals) {
+  if (!dailyData || dailyData.length === 0) return '';
+  var html = '<div class="filial-detail-section">' +
+    '<div class="filial-detail-section-title">&#x1F4C5; По дням</div>' +
+    '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+    '<tr style="color:var(--text-3);border-bottom:1px solid var(--border);"><th style="text-align:left;padding:4px;">Дата</th><th style="text-align:right;padding:4px;">Ателье</th><th style="text-align:right;padding:4px;">ХЧ</th><th style="text-align:right;padding:4px;">Кл</th></tr>';
+  dailyData.forEach(function(d) {
+    html += '<tr style="border-bottom:1px solid var(--border);">' +
+      '<td style="padding:3px 4px;">' + d.date + '</td>' +
+      '<td style="text-align:right;padding:3px 4px;">' + fmtShort(d.atelie || 0) + '</td>' +
+      '<td style="text-align:right;padding:3px 4px;">' + fmtShort(d.himchistka || 0) + '</td>' +
+      '<td style="text-align:right;padding:3px 4px;">' + (d.clients || 0) + '</td>' +
+    '</tr>';
+  });
+  if (totals) {
+    html += '<tr style="font-weight:700;border-top:2px solid var(--text-1);">' +
+      '<td style="padding:4px;">Итого</td>' +
+      '<td style="text-align:right;padding:4px;">' + fmtShort(totals.atelie || 0) + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + fmtShort(totals.himchistka || 0) + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + (totals.clients || 0) + '</td>' +
+    '</tr>';
+  }
+  html += '</table></div>';
+  return html;
 }
 
 function showBranchDataEmpty() {
@@ -1936,6 +1989,9 @@ function openFilialDetail(f, month) {
 
   // Deep analytics section
   html += '<div id="branchAnalytics"></div>';
+
+  // Daily table section (populated by getBranchDaily API)
+  html += '<div id="branchDailyTable"></div>';
 
   html += '<div class="overlay-close" onclick="closeOverlay(\'filialOverlay\')">Закрыть</div>';
 

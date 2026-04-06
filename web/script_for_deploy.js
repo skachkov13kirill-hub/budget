@@ -1684,13 +1684,83 @@ function handleUploadReportPhoto(data) {
 // ─── К3: ЗАГЛУШКИ (пока не реализованы) ───────────────────────────────────
 
 function handleGetHistory(e) {
-  // TODO: реализовать получение исторических данных по филиалам
-  return { success: true, data: [], message: 'Not implemented yet' };
+  var branchFilter = (e && e.parameter && e.parameter.branch) || '';
+  var startMonth = parseInt((e && e.parameter && e.parameter.startMonth) || '1');
+  var endMonth = parseInt((e && e.parameter && e.parameter.endMonth) || new Date().getMonth() + 1);
+
+  if (startMonth < 1) startMonth = 1;
+  if (endMonth > 12) endMonth = 12;
+  if (startMonth > endMonth) startMonth = endMonth;
+
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  var history = [];
+
+  for (var m = startMonth; m <= endMonth; m++) {
+    var monthTotals = readBranchTotalsFromObsh(ss, m);
+    if (!monthTotals) continue;
+
+    var monthData = {
+      month: m,
+      monthName: monthNames[m],
+      branches: {}
+    };
+
+    for (var code in monthTotals) {
+      if (code === '_OVERALL') {
+        monthData.overall = monthTotals[code];
+        continue;
+      }
+      if (branchFilter && code !== branchFilter) continue;
+      monthData.branches[code] = monthTotals[code];
+    }
+
+    history.push(monthData);
+  }
+
+  return { success: true, data: history, startMonth: startMonth, endMonth: endMonth, branchFilter: branchFilter || 'all' };
 }
 
 function handleGetBranchDaily(e) {
-  // TODO: реализовать получение дневной статистики по филиалу
-  return { success: true, data: [], message: 'Not implemented yet' };
+  var branchCode = (e && e.parameter && e.parameter.branch) || '';
+  var month = parseInt((e && e.parameter && e.parameter.month) || new Date().getMonth() + 1);
+
+  if (!branchCode) {
+    return { success: false, message: 'Параметр branch обязателен (например: М16, В8, П14)' };
+  }
+  if (month < 1 || month > 12) {
+    return { success: false, message: 'Параметр month должен быть от 1 до 12' };
+  }
+
+  var ss = SpreadsheetApp.openById(ATELIE_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(branchCode);
+  if (!sheet) {
+    return { success: false, message: 'Филиал не найден: ' + branchCode };
+  }
+
+  var monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  var shortMonths = ['', 'Янв', 'Фев', 'Март', 'Апр', 'Май', 'Июнь',
+                      'Июль', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+  var detail = parseBranchSheet(sheet, month, monthNames, shortMonths);
+
+  return {
+    success: true,
+    branch: branchCode,
+    month: month,
+    monthName: monthNames[month],
+    dailyData: detail.daily || [],
+    totals: {
+      revenue: detail.revenue,
+      atelie: detail.atelie,
+      himchistka: detail.himchistka,
+      clients: detail.clients,
+      expenses: detail.expenses,
+      profit: detail.profit
+    }
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
