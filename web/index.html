@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=30">
+<link rel="stylesheet" href="css/app.css?v=31">
 <title>DressCode · Дашборд</title>
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
@@ -49,6 +49,9 @@
   </button>
   <button class="nav-btn" onclick="switchTab('daily',this)" id="nav-daily">
     <span class="nav-icon">&#x1F4C5;</span>Дни
+  </button>
+  <button class="nav-btn" onclick="switchTab('payments',this);if(typeof loadPayments==='function')loadPayments();" id="nav-payments">
+    <span class="nav-icon">&#x1F4B3;</span>Оплаты
   </button>
   <button class="nav-btn" onclick="switchTab('nedviga',this);if(typeof loadNedviga==='function')loadNedviga();" id="nav-nedviga">
     <span class="nav-icon">&#x1F3E0;</span>Недвига
@@ -118,6 +121,13 @@
   <div id="dailyChartError" style="display:none;"></div>
 </div>
 
+<!-- TAB: ОПЛАТЫ (FIX-031) -->
+<div class="main-tab" id="tab-payments">
+  <div id="paymentsContent">
+    <div class="loading-box"><div class="spinner"></div><p>Загрузка оплат...</p></div>
+  </div>
+</div>
+
 <!-- TAB: НЕДВИГА -->
 <div class="main-tab" id="tab-nedviga">
   <div id="nedvigaContent">
@@ -131,6 +141,7 @@
 <script src="js/weather.js?v=29"></script>
 <script src="js/business.js?v=29"></script>
 <script src="js/daily.js?v=29"></script>
-<script src="js/nedviga.js?v=1"></script>
+<script src="js/nedviga.js?v=2"></script>
+<script src="js/payments.js?v=2"></script>
 </body>
 </html>

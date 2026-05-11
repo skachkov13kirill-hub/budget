@@ -1761,3 +1761,65 @@ body {
   background: var(--orange-light); color: var(--orange);
   padding: 4px 10px; border-radius: 50px; font-weight: 700;
 }
+
+/* ── Кликабельные элементы НЕДВИГА (FIX-031) ── */
+.ndv-row-clickable { cursor: pointer; transition: transform 0.08s, box-shadow 0.15s; -webkit-tap-highlight-color: transparent; }
+.ndv-row-clickable:active { transform: scale(0.985); }
+.ndv-ku-cell-clickable {
+  cursor: pointer; user-select: none; font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  height: 32px; border-radius: 6px; transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.ndv-ku-cell-clickable:active { background: var(--bg); }
+
+/* ── Вкладка «Оплаты» (FIX-031) ── */
+.pay-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 6px; gap: 12px; flex-wrap: wrap;
+}
+.pay-title { font-size: 17px; font-weight: 700; color: var(--text); }
+
+.pay-block {
+  margin: 8px 12px 14px; background: var(--surface); border-radius: 14px;
+  border: 1px solid var(--border); overflow: hidden;
+}
+.pay-block-in { border-left: 3px solid var(--green); }
+.pay-block-out { border-left: 3px solid var(--orange); }
+
+.pay-block-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; font-weight: 700; font-size: 14px; color: var(--text);
+  border-bottom: 1px solid var(--border); background: var(--bg);
+  flex-wrap: wrap; gap: 6px;
+}
+.pay-block-counter { font-weight: 600; font-size: 12px; color: var(--text-2); }
+
+.pay-channel { border-top: 1px solid var(--border); }
+.pay-channel:first-of-type { border-top: none; }
+.pay-channel-head {
+  padding: 10px 14px 4px; font-size: 13px; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.pay-channel-counter { margin-left: auto; font-size: 11px; color: var(--text-3); font-weight: 600; }
+
+.pay-list { padding: 4px 0 8px; }
+.pay-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 16px; cursor: pointer; transition: background 0.12s, transform 0.08s;
+  -webkit-tap-highlight-color: transparent;
+}
+.pay-row:active { transform: scale(0.99); background: var(--bg); }
+.pay-row-icon { font-size: 16px; line-height: 1; flex: 0 0 auto; width: 22px; text-align: center; }
+.pay-row-main { flex: 1; min-width: 0; }
+.pay-row-name { font-weight: 600; font-size: 14px; color: var(--text); }
+.pay-row-meta { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.pay-row-amount { font-weight: 700; font-size: 14px; color: var(--text); }
+.pay-row-done .pay-row-name { opacity: 0.7; text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
+.pay-row-done .pay-row-amount { color: var(--green); }
+.pay-row-wait .pay-row-amount { color: var(--text); }
+
+.pay-empty, .pay-error {
+  padding: 32px 16px; text-align: center; color: var(--text-2); font-size: 14px;
+}
+.pay-error { color: var(--red); }

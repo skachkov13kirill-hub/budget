@@ -1,474 +1,227 @@
 // ═══════════════════════════════════════════════════════════════
-// PAYMENTS.JS — Вкладка "Платежи" DressCode Dashboard
-// Два блока: Кредиты + Аренда, чек-лист с выбором способа оплаты
-// Данные хранятся в Google Sheets (лист ПЛАТЕЖИ) + localStorage как кэш
+// PAYMENTS.JS — Вкладка «Оплаты» DressCode Дашборд (FIX-031)
+// Входящие (приём субаренды налом) + Исходящие (нал / карта / р/с).
+// Источник: state_api на VPS, эндпоинты:
+//   GET  /api/atelie/snapshot
+//   POST /api/atelie/mark   {section, id, marked}
 // ═══════════════════════════════════════════════════════════════
 
-var EXTRA_INCOME = 100000;
+var PAYMENTS_API_BASE = 'http://176.124.208.212:8765';
+var PAYMENTS_API_SNAPSHOT = PAYMENTS_API_BASE + '/api/atelie/snapshot';
+var PAYMENTS_API_MARK = PAYMENTS_API_BASE + '/api/atelie/mark';
+var PAYMENTS_TOKEN = (typeof NEDVIGA_TOKEN !== 'undefined') ? NEDVIGA_TOKEN : '';
+var PAYMENTS_CACHE_KEY = 'dresscode_payments_v2';
+var PAYMENTS_CACHE_TTL = 5 * 60 * 1000;
 
-// ── СУБАРЕНДА (возврат с 1 по 10 число) ──
-var SUBRENT_ITEMS = [
-  { name: 'М16 субаренда', amount: 27000, day: 10 },
-  { name: 'Г4 субаренда', amount: 34000, day: 10 },
-  { name: 'В22 субаренда (65К)', amount: 65000, day: 10 },
-  { name: 'В22 субаренда (27К)', amount: 27000, day: 10 }
-];
+var paymentsData = null;
+var paymentsLoading = false;
 
-// ── RENT DATA (аренда по филиалам) ──
-// Аренда по договору. Актуально 01.04.2026 (из _СИСТЕМА/АКТУАЛЬНЫЕ_ДАННЫЕ/аренда.md)
-var RENT_ITEMS = [
-  { name: 'М16 (Менделеева 16)', amount: 29500, day: 28 },
-  { name: 'В8 (Воронцовский 8)', amount: 50000, day: 28 },
-  { name: 'П14 (Петровский 14)', amount: 80000, day: 28 },
-  { name: 'А6 (Арсенальная 6)', amount: 34062, day: 28 },
-  { name: 'Г4 (Графская 4)', amount: 34000, day: 28 },
-  { name: 'В22 (Воронцовский 22)', amount: 50000, day: 28 },
-  { name: 'Е8 (Екатерининская 8)', amount: 45000, day: 28 },
-  { name: 'В20 (Воронцовский 20)', amount: 30000, day: 28 },
-  { name: 'Е17 (Екатерининская 17)', amount: 41500, day: 28 },
-  { name: 'Г11 (Графская 11)', amount: 25000, day: 28 }
-];
+var CHANNEL_LABELS = {
+  cash:     { icon: '💵', label: 'Налом'        },
+  transfer: { icon: '📲', label: 'Карта (перевод)' },
+  rs:       { icon: '💳', label: 'Р/с (Сбер)'   }
+};
+var CHANNEL_ORDER = ['cash', 'transfer', 'rs'];
 
-// ── STORAGE (localStorage как кэш, Sheets как источник правды) ──
-var _paymentsLoaded = false;
-var _paymentsLoadedMonth = '';
-var _paymentsSaving = false;
+var PAYMENTS_MONTH_NAMES = ['','январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 
-function getSelectedMonth() {
-  var sel = document.getElementById('bizMonthSelect');
-  return sel ? parseInt(sel.value) : new Date().getMonth() + 1;
-}
+function loadPayments(force) {
+  if (paymentsLoading) return;
 
-function getSelectedYear() {
-  var sel = document.getElementById('bizYearSelect');
-  return sel ? parseInt(sel.value) : new Date().getFullYear();
-}
-
-function getPaymentsKey(prefix) {
-  return (prefix || 'dresscode_payments') + '_' + getSelectedYear() + '-' + getSelectedMonth();
-}
-
-function getCurrentYearMonth() {
-  return getSelectedYear() + '-' + getSelectedMonth();
-}
-
-function getPaymentsData(prefix) {
-  try { return JSON.parse(localStorage.getItem(getPaymentsKey(prefix)) || '{}'); } catch(e) { return {}; }
-}
-
-function savePaymentsData(data, prefix) {
-  localStorage.setItem(getPaymentsKey(prefix), JSON.stringify(data));
-}
-
-// ── SYNC WITH GOOGLE SHEETS ──
-function loadPaymentsFromSheets() {
-  if (_paymentsLoaded || typeof API_ATELIE === 'undefined') return;
-  var url = API_ATELIE + '?action=getPaymentsStatus&month=' + encodeURIComponent(getCurrentYearMonth());
-  fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(resp) {
-      if (!resp.success) return;
-      _paymentsLoaded = true;
-      _paymentsLoadedMonth = getCurrentYearMonth();
-      // Записываем данные из Sheets в localStorage (как кэш)
-      if (resp.credits && Object.keys(resp.credits).length > 0) {
-        savePaymentsData(resp.credits, 'dresscode_payments');
+  if (!force) {
+    try {
+      var raw = localStorage.getItem(PAYMENTS_CACHE_KEY);
+      if (raw) {
+        var c = JSON.parse(raw);
+        if (Date.now() - c.ts < PAYMENTS_CACHE_TTL && c.data) {
+          paymentsData = c.data;
+          renderPayments();
+        }
       }
-      if (resp.rent && Object.keys(resp.rent).length > 0) {
-        savePaymentsData(resp.rent, 'dresscode_rent');
-      }
-      if (resp.subrent && Object.keys(resp.subrent).length > 0) {
-        savePaymentsData(resp.subrent, 'dresscode_subrent');
-      }
-      if (resp.extraIncome !== undefined) {
-        localStorage.setItem(getExtraIncomeKey(), resp.extraIncome ? '1' : '0');
-      }
-      renderPaymentsTab();
+    } catch (e) {}
+  }
+
+  paymentsLoading = true;
+  if (!paymentsData) renderPaymentsLoading();
+
+  var url = PAYMENTS_API_SNAPSHOT + '?token=' + encodeURIComponent(PAYMENTS_TOKEN) + '&_t=' + Date.now();
+  fetch(url, { cache: 'no-store', headers: { 'Authorization': 'Bearer ' + PAYMENTS_TOKEN } })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
     })
-    .catch(function(err) {
-      console.warn('Payments sync failed, using localStorage:', err);
+    .then(function (data) {
+      paymentsLoading = false;
+      paymentsData = data;
+      try { localStorage.setItem(PAYMENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch (e) {}
+      renderPayments();
+    })
+    .catch(function (err) {
+      paymentsLoading = false;
+      console.warn('payments API failed:', err);
+      if (!paymentsData) renderPaymentsError(err);
     });
 }
 
-function savePaymentsToSheets() {
-  if (_paymentsSaving || typeof API_ATELIE === 'undefined') return;
-  _paymentsSaving = true;
-  var payload = {
-    month: getCurrentYearMonth(),
-    credits: getPaymentsData('dresscode_payments'),
-    rent: getPaymentsData('dresscode_rent'),
-    subrent: getPaymentsData('dresscode_subrent'),
-    extraIncome: isExtraIncomeReceived()
-  };
-
-  fetch(API_ATELIE + '?action=savePaymentsStatus', {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(payload),
-    redirect: 'follow'
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(resp) {
-    _paymentsSaving = false;
-    if (resp.success) console.log('Payments saved to Sheets');
-  })
-  .catch(function(err) {
-    _paymentsSaving = false;
-    console.warn('Payments save failed:', err);
-  });
-}
-
-// Дебаунс — не сохранять при каждом клике, а через 1 сек после последнего
-var _saveTimer = null;
-function debounceSaveToSheets() {
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(savePaymentsToSheets, 1000);
-}
-
-// ── TOGGLE PAYMENT ──
-function togglePayment(idx, method) {
-  var data = getPaymentsData('dresscode_payments');
-  if (data[idx] === method) { delete data[idx]; }
-  else { data[idx] = method; }
-  savePaymentsData(data, 'dresscode_payments');
-  debounceSaveToSheets();
-  renderPaymentsTab();
-}
-
-function toggleRentPayment(idx, method) {
-  var data = getPaymentsData('dresscode_rent');
-  if (data[idx] === method) { delete data[idx]; }
-  else { data[idx] = method; }
-  savePaymentsData(data, 'dresscode_rent');
-  debounceSaveToSheets();
-  renderPaymentsTab();
-}
-
-function toggleSubrentPayment(idx, method) {
-  var data = getPaymentsData('dresscode_subrent');
-  if (data[idx] === method) { delete data[idx]; }
-  else { data[idx] = method; }
-  savePaymentsData(data, 'dresscode_subrent');
-  debounceSaveToSheets();
-  renderPaymentsTab();
-}
-
-// ── EXTRA INCOME TOGGLE ──
-function getExtraIncomeKey() {
-  return 'dresscode_extra_income_' + getSelectedYear() + '-' + getSelectedMonth();
-}
-
-function isExtraIncomeReceived() {
-  var v = localStorage.getItem(getExtraIncomeKey());
-  return v === '1' || v === 'true';
-}
-
-function toggleExtraIncome() {
-  var key = getExtraIncomeKey();
-  var current = isExtraIncomeReceived();
-  localStorage.setItem(key, current ? '0' : '1');
-  debounceSaveToSheets();
-  renderPaymentsTab();
-  if (typeof renderPlanner === 'function' && state.branches) renderPlanner(state.branches);
-}
-
-// ── BUILD ITEMS LIST ──
-function buildCreditItems(paymentsData, today) {
-  var items = [];
-  if (!state.credits || !state.credits.length) return items;
-  state.credits.forEach(function(cr, i) {
-    if (cr.status === 'Заморожен') return;
-    var day = parseInt(cr.paymentDay) || parseInt(cr.paymentDate) || 0;
-    if (day === 0) {
-      var dm = String(cr.paymentDate || '').match(/(\d{1,2})/);
-      if (dm) day = parseInt(dm[1]);
-    }
-    items.push({
-      idx: i,
-      name: cr.name || cr.Кредитор || 'Кредит',
-      amount: parseFloat(cr.payment) || 0,
-      day: day,
-      paidMethod: paymentsData[i] || null,
-      isToday: day === today,
-      isPast: day > 0 && day < today
-    });
-  });
-  items.sort(function(a, b) { return a.day - b.day; });
-  return items;
-}
-
-function buildRentItems(rentData, today) {
-  var items = [];
-  RENT_ITEMS.forEach(function(r, i) {
-    items.push({
-      idx: i,
-      name: r.name,
-      amount: r.amount,
-      day: r.day,
-      paidMethod: rentData[i] || null,
-      isToday: r.day === today,
-      isPast: r.day > 0 && r.day < today
-    });
-  });
-  items.sort(function(a, b) { return a.day - b.day; });
-  return items;
-}
-
-function buildSubrentItems(subrentData, today) {
-  var items = [];
-  SUBRENT_ITEMS.forEach(function(r, i) {
-    items.push({
-      idx: i,
-      name: r.name,
-      amount: r.amount,
-      day: r.day,
-      paidMethod: subrentData[i] || null,
-      isToday: r.day === today,
-      isPast: r.day > 0 && r.day < today
-    });
-  });
-  return items;
-}
-
-// ── RENDER BLOCK OF CARDS ──
-function renderPaymentCards(items, toggleFn) {
-  var html = '';
-  items.forEach(function(p) {
-    var isPaid = !!p.paidMethod;
-    var statusIcon = isPaid ? '&#x2705;' : (p.isToday ? '&#x1F534;' : (p.isPast && !isPaid ? '&#x26A0;&#xFE0F;' : '&#x23F3;'));
-    var overdue = p.isPast && !isPaid;
-
-    html += '<div class="pay-card' + (isPaid ? ' pay-card-done' : '') + (overdue ? ' pay-card-overdue' : '') + '">' +
-      '<div class="pay-card-top">' +
-        '<div class="pay-card-status">' + statusIcon + '</div>' +
-        '<div class="pay-card-info">' +
-          '<div class="pay-card-name' + (isPaid ? ' pay-card-name-done' : '') + '">' + p.name + '</div>' +
-          '<div class="pay-card-date">' + (p.day || '&mdash;') + ' число' +
-            (isPaid ? ' &middot; <span class="pay-method-badge pay-method-' + p.paidMethod + '">' + getMethodLabel(p.paidMethod) + '</span>' : '') +
-          '</div>' +
-        '</div>' +
-        '<div class="pay-card-amount' + (isPaid ? ' pay-card-amount-done' : '') + '">' + fmtShort(p.amount) + '</div>' +
-      '</div>' +
-      '<div class="pay-methods">' +
-        payMethodBtn2(p.idx, 'cash', '&#x1F4B5;', 'Нал', p.paidMethod, toggleFn) +
-        payMethodBtn2(p.idx, 'transfer', '&#x1F3E6;', 'Безнал', p.paidMethod, toggleFn) +
-        payMethodBtn2(p.idx, 'card', '&#x1F4B3;', 'Карта', p.paidMethod, toggleFn) +
-      '</div>' +
-    '</div>';
-  });
-  return html;
-}
-
-// ── RENDER ──
-function renderPaymentsTab() {
+function renderPaymentsLoading() {
   var el = document.getElementById('paymentsContent');
-  var summaryEl = document.getElementById('paymentsSummary');
-  var monthEl = document.getElementById('paymentsMonthName');
   if (!el) return;
+  el.innerHTML = '<div class="loading-box"><div class="spinner"></div><p>Загрузка оплат...</p></div>';
+}
 
-  // Загружаем данные из Sheets при первом рендере или смене месяца
-  var currentYM = getCurrentYearMonth();
-  if (!_paymentsLoaded || _paymentsLoadedMonth !== currentYM) {
-    _paymentsLoaded = false;
-    loadPaymentsFromSheets();
-  }
+function renderPaymentsError(err) {
+  var el = document.getElementById('paymentsContent');
+  if (!el) return;
+  el.innerHTML = '<div class="pay-error">Не удалось загрузить оплаты.<br>' +
+    '<button class="ndv-refresh" onclick="loadPayments(true)">Повторить</button></div>';
+}
 
-  var cm = getSelectedMonth();
-  var now = new Date();
-  var selYear = getSelectedYear();
-  var isCurrentMonth = (selYear === now.getFullYear() && cm === now.getMonth() + 1);
-  var today = isCurrentMonth ? now.getDate() : 0;
-  if (monthEl) monthEl.textContent = MONTH_NAMES[cm];
+function renderPayments() {
+  var el = document.getElementById('paymentsContent');
+  if (!el || !paymentsData) return;
 
-  var creditPayData = getPaymentsData('dresscode_payments');
-  var rentPayData = getPaymentsData('dresscode_rent');
-  var subrentPayData = getPaymentsData('dresscode_subrent');
+  var ym = paymentsData.ym || '';
+  var monthLabel = paymentsMonthLabel(ym);
 
-  var creditItems = buildCreditItems(creditPayData, today);
-  var rentItems = buildRentItems(rentPayData, today);
-  var subrentItems = buildSubrentItems(subrentPayData, today);
-  var allItems = creditItems.concat(rentItems);
-
-  if (creditItems.length === 0 && rentItems.length === 0) {
-    summaryEl.innerHTML = '';
-    el.innerHTML = '<div class="pay-empty"><div style="font-size:40px;margin-bottom:12px;">&#x1F4B3;</div>' +
-      '<div style="font-size:14px;font-weight:600;">Нет данных о платежах</div>' +
-      '<div style="font-size:12px;color:var(--text-3);margin-top:4px;">Нажмите &#x21bb; для загрузки</div></div>';
-    return;
-  }
-
-  // Totals (credits + rent combined)
-  var totalAll = 0, totalPaid = 0, totalUnpaid = 0, paidCount = 0;
-  allItems.forEach(function(p) {
-    totalAll += p.amount;
-    if (p.paidMethod) { totalPaid += p.amount; paidCount++; }
-    else { totalUnpaid += p.amount; }
-  });
-
-  var extraReceived = isExtraIncomeReceived();
-  var pctDone = allItems.length > 0 ? Math.round((paidCount / allItems.length) * 100) : 0;
-
-  // Summary card — общая сумма кредиты + аренда
-  summaryEl.innerHTML =
-    '<div class="pay-summary-card">' +
-      '<div class="pay-summary-top">' +
-        '<div class="pay-summary-left">' +
-          '<div class="pay-summary-label">Всего платежей</div>' +
-          '<div class="pay-summary-total">' + fmtShort(totalAll) + '</div>' +
-        '</div>' +
-        '<div class="pay-summary-right">' +
-          '<div class="pay-summary-done">' + paidCount + '/' + allItems.length + '</div>' +
-          '<div class="pay-summary-pct">' + pctDone + '%</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="pay-progress-bg"><div class="pay-progress-fg" style="width:' + pctDone + '%"></div></div>' +
-      '<div class="pay-summary-row">' +
-        '<span style="color:var(--green);">&#x2705; ' + fmtShort(totalPaid) + '</span>' +
-        '<span style="color:var(--text-3);">&#x23F3; ' + fmtShort(totalUnpaid) + '</span>' +
-      '</div>' +
-    '</div>';
+  var incoming = paymentsData.incoming_cash || [];
+  var rentals = paymentsData.rentals_outgoing || [];
+  var credits = paymentsData.credits || [];
+  var outgoing = rentals.concat(credits);
 
   var html = '';
 
-  // Next upcoming payment alert (from all items)
-  var allSorted = allItems.slice().sort(function(a, b) { return a.day - b.day; });
-  var todayPay = allSorted.find(function(p) { return p.isToday && !p.paidMethod; });
-  var nextPay = allSorted.find(function(p) { return !p.paidMethod && !p.isPast; });
+  // Header
+  html += '<div class="pay-header">';
+  html += '<div class="pay-title">💳 Оплаты · ' + monthLabel + '</div>';
+  var ts = paymentsData.generated_at ? new Date(paymentsData.generated_at) : null;
+  var tsLabel = ts ? ('обновлено ' + String(ts.getHours()).padStart(2,'0') + ':' + String(ts.getMinutes()).padStart(2,'0')) : '';
+  html += '<button class="ndv-refresh" onclick="loadPayments(true)">' + (tsLabel || 'обновить') + '</button>';
+  html += '</div>';
 
-  if (todayPay) {
-    html += '<div class="pay-alert pay-alert-today">' +
-      '<div class="pay-alert-icon">&#x1F534;</div>' +
-      '<div class="pay-alert-info">' +
-        '<div class="pay-alert-label">СЕГОДНЯ</div>' +
-        '<div class="pay-alert-text">' + todayPay.name + ' &mdash; ' + fmt(todayPay.amount) + '</div>' +
-      '</div>' +
-    '</div>';
-  } else if (nextPay && !nextPay.isPast) {
-    var daysTo = nextPay.day - today;
-    if (daysTo >= 0 && daysTo <= 5) {
-      html += '<div class="pay-alert' + (daysTo <= 2 ? ' pay-alert-urgent' : '') + '">' +
-        '<div class="pay-alert-icon">' + (daysTo <= 2 ? '&#x26A0;&#xFE0F;' : '&#x23F3;') + '</div>' +
-        '<div class="pay-alert-info">' +
-          '<div class="pay-alert-label">' + (daysTo <= 2 ? 'СКОРО' : 'СЛЕДУЮЩИЙ') + '</div>' +
-          '<div class="pay-alert-text">' + nextPay.name + ' &mdash; ' + fmt(nextPay.amount) + '</div>' +
-          '<div class="pay-alert-date">' + nextPay.day + ' ' + MONTH_NAMES[cm] + ' &middot; через ' + daysTo + ' дн.</div>' +
-        '</div>' +
-      '</div>';
-    }
-  }
+  // ── ВХОДЯЩИЕ ──
+  if (incoming.length > 0) {
+    var inDone = incoming.filter(function (x) { return x.marked; });
+    var inTotal = incoming.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+    var inPaid = inDone.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
 
-  // ── БЛОК 1: КРЕДИТЫ ──
-  if (creditItems.length > 0) {
-    var creditTotal = 0;
-    creditItems.forEach(function(p) { creditTotal += p.amount; });
-    html += '<div class="pay-section-header">' +
-      '<span class="pay-section-title">Кредиты</span>' +
-      '<span class="pay-section-sum">' + fmtShort(creditTotal) + '</span>' +
-    '</div>';
-    html += renderPaymentCards(creditItems, 'togglePayment');
-  }
-
-  // ── БЛОК 2: АРЕНДА ──
-  if (rentItems.length > 0) {
-    var rentTotal = 0;
-    rentItems.forEach(function(p) { rentTotal += p.amount; });
-    html += '<div class="pay-section-header">' +
-      '<span class="pay-section-title">Аренда</span>' +
-      '<span class="pay-section-sum">' + fmtShort(rentTotal) + '</span>' +
-    '</div>';
-    html += renderPaymentCards(rentItems, 'toggleRentPayment');
-  }
-
-  // ── БЛОК 3: СУБАРЕНДА (доход, с 1 по 10 число) ──
-  if (subrentItems.length > 0) {
-    var subrentTotal = 0, subrentReceived = 0;
-    subrentItems.forEach(function(p) {
-      subrentTotal += p.amount;
-      if (p.paidMethod) subrentReceived += p.amount;
+    html += '<div class="pay-block pay-block-in">';
+    html += '<div class="pay-block-head"><span>🟢 Принять налом (1-го)</span>';
+    html += '<span class="pay-block-counter">' + inDone.length + '/' + incoming.length + ' · ' + paymentsFmt(inPaid) + ' / ' + paymentsFmt(inTotal) + '</span>';
+    html += '</div>';
+    html += '<div class="pay-list">';
+    incoming.forEach(function (it) {
+      html += renderPaymentRow(it, 'incoming_cash');
     });
-    html += '<div class="pay-section-header">' +
-      '<span class="pay-section-title" style="color:var(--green);">Субаренда (возврат)</span>' +
-      '<span class="pay-section-sum" style="color:var(--green);">+' + fmtShort(subrentTotal) + '</span>' +
-    '</div>';
-    html += renderPaymentCards(subrentItems, 'toggleSubrentPayment');
+    html += '</div></div>';
   }
 
-  // Extra income card
-  html += '<div class="pay-card pay-card-income' + (extraReceived ? ' pay-card-done' : '') + '" onclick="toggleExtraIncome()">' +
-    '<div class="pay-card-top">' +
-      '<div class="pay-card-status">' + (extraReceived ? '&#x2705;' : '&#x2B1C;') + '</div>' +
-      '<div class="pay-card-info">' +
-        '<div class="pay-card-name' + (extraReceived ? ' pay-card-name-done' : '') + '" style="color:var(--green);">Доход +100К</div>' +
-        '<div class="pay-card-date">ежемесячный доход</div>' +
-      '</div>' +
-      '<div class="pay-card-amount" style="color:var(--green);' + (extraReceived ? 'opacity:0.4;' : '') + '">+' + fmtShort(EXTRA_INCOME) + '</div>' +
-    '</div>' +
-  '</div>';
+  // ── ИСХОДЯЩИЕ ──
+  if (outgoing.length > 0) {
+    var outDone = outgoing.filter(function (x) { return x.marked; });
+    var outTotal = outgoing.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+    var outPaid = outDone.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
 
-  // Net balance
-  html += '<div class="pay-net">' +
-    '<span>Баланс платежей:</span>' +
-    '<span class="' + ((extraReceived ? EXTRA_INCOME - totalUnpaid : -totalUnpaid) >= 0 ? 'pay-net-pos' : 'pay-net-neg') + '">' +
-      (extraReceived ? fmtShort(EXTRA_INCOME) + ' &minus; ' + fmtShort(totalUnpaid) + ' = ' : '') +
-      fmtShort(extraReceived ? EXTRA_INCOME - totalUnpaid : -totalUnpaid) +
-    '</span>' +
-  '</div>';
+    html += '<div class="pay-block pay-block-out">';
+    html += '<div class="pay-block-head"><span>🔴 Заплатить</span>';
+    html += '<span class="pay-block-counter">' + outDone.length + '/' + outgoing.length + ' · ' + paymentsFmt(outPaid) + ' / ' + paymentsFmt(outTotal) + '</span>';
+    html += '</div>';
+
+    CHANNEL_ORDER.forEach(function (ch) {
+      var rentItems = rentals.filter(function (x) { return x.channel === ch; });
+      var credItems = credits.filter(function (x) { return x.channel === ch; });
+      var items = rentItems.concat(credItems);
+      if (items.length === 0) return;
+      var meta = CHANNEL_LABELS[ch] || { icon: '?', label: ch };
+      var chDone = items.filter(function (x) { return x.marked; }).length;
+      var chTotal = items.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+      var chPaid = items.filter(function (x) { return x.marked; }).reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+
+      html += '<div class="pay-channel">';
+      html += '<div class="pay-channel-head">' + meta.icon + ' <b>' + meta.label + '</b>';
+      html += ' <span class="pay-channel-counter">' + chDone + '/' + items.length + ' · ' + paymentsFmt(chPaid) + ' / ' + paymentsFmt(chTotal) + '</span>';
+      html += '</div>';
+      html += '<div class="pay-list">';
+      // rentals first, then credits
+      rentItems.forEach(function (it) { html += renderPaymentRow(it, 'rentals_outgoing'); });
+      credItems.forEach(function (it) { html += renderPaymentRow(it, 'credits'); });
+      html += '</div></div>';
+    });
+
+    html += '</div>';
+  }
+
+  if (incoming.length === 0 && outgoing.length === 0) {
+    html += '<div class="pay-empty">Нет активных платежей в atelier.json.</div>';
+  }
 
   el.innerHTML = html;
 }
 
-// ── HELPERS ──
-function getMethodLabel(method) {
-  if (method === 'cash') return 'Нал';
-  if (method === 'transfer') return 'Безнал';
-  if (method === 'card') return 'Карта';
-  return '';
+function renderPaymentRow(it, section) {
+  var marked = !!it.marked;
+  var icon = marked ? '✅' : '⏳';
+  var dayLabel = it.day ? (it.day + '-го') : '';
+  var safeId = String(it.id).replace(/'/g, "\\'");
+  var onclick = 'onclick="paymentsMark(\'' + section + '\',\'' + safeId + '\',' + (marked ? 'false' : 'true') + ')"';
+  var html = '<div class="pay-row ' + (marked ? 'pay-row-done' : 'pay-row-wait') + '" ' + onclick + '>';
+  html += '<div class="pay-row-icon">' + icon + '</div>';
+  html += '<div class="pay-row-main">';
+  html += '<div class="pay-row-name">' + escapeHtml(it.name) + '</div>';
+  if (dayLabel) html += '<div class="pay-row-meta">' + dayLabel + '</div>';
+  html += '</div>';
+  html += '<div class="pay-row-amount">' + paymentsFmt(it.amount) + '</div>';
+  html += '</div>';
+  return html;
 }
 
-function payMethodBtn2(idx, method, icon, label, current, toggleFn) {
-  var isActive = current === method;
-  return '<button class="pay-method-btn' + (isActive ? ' pay-method-active' : '') + '" ' +
-    'onclick="event.stopPropagation();' + toggleFn + '(' + idx + ',\'' + method + '\')">' +
-    '<span class="pay-method-icon">' + icon + '</span>' +
-    '<span class="pay-method-label">' + label + '</span>' +
-  '</button>';
+function paymentsMark(section, id, marked) {
+  paymentsApplyMark(section, id, marked);
+
+  fetch(PAYMENTS_API_MARK, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + PAYMENTS_TOKEN
+    },
+    body: JSON.stringify({ section: section, id: id, marked: marked })
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'mark_failed');
+    })
+    .catch(function (err) {
+      console.warn('payments mark failed:', err);
+      paymentsApplyMark(section, id, !marked);
+      if (typeof showToast === 'function') showToast('Не удалось сохранить отметку');
+    });
 }
 
-// Keep old function for backward compat
-function payMethodBtn(idx, method, icon, label, current) {
-  return payMethodBtn2(idx, method, icon, label, current, 'togglePayment');
-}
-
-// ── BACKWARD COMPAT: migrate old credits_paid format ──
-function migrateOldPayments() {
-  var now = new Date();
-  var oldKey = 'dresscode_credits_paid_' + now.getFullYear() + '-' + (now.getMonth() + 1);
-  var newKey = getPaymentsKey('dresscode_payments');
-  try {
-    var oldData = JSON.parse(localStorage.getItem(oldKey) || '{}');
-    var newData = getPaymentsData('dresscode_payments');
-    var hasNew = Object.keys(newData).length > 0;
-    if (!hasNew && Object.keys(oldData).length > 0) {
-      var migrated = {};
-      Object.keys(oldData).forEach(function(k) {
-        if (oldData[k]) migrated[k] = 'transfer';
-      });
-      savePaymentsData(migrated, 'dresscode_payments');
+function paymentsApplyMark(section, id, marked) {
+  if (!paymentsData) return;
+  var list = paymentsData[section];
+  if (!list) return;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      list[i].marked = !!marked;
+      list[i].at = marked ? new Date().toISOString() : null;
+      try { localStorage.setItem(PAYMENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: paymentsData })); } catch (e) {}
+      renderPayments();
+      return;
     }
-  } catch(e) {}
+  }
 }
 
-// ── GET CREDITS PAID TOTAL (used by business.js planner) ──
-function getCreditsPaidTotal() {
-  if (!state.credits || !state.credits.length) return 0;
-  var data = getPaymentsData('dresscode_payments');
-  var paid = 0;
-  state.credits.forEach(function(cr, i) {
-    if (cr.status === 'Заморожен') return;
-    if (data[i]) paid += (parseFloat(cr.payment) || 0);
-  });
-  return paid;
+function paymentsFmt(num) {
+  if (num === null || num === undefined) return '—';
+  return new Intl.NumberFormat('ru-RU').format(num) + ' ₽';
 }
 
-// Run migration on load
-migrateOldPayments();
+function paymentsMonthLabel(ym) {
+  if (!ym) return '';
+  var parts = ym.split('-');
+  var m = parseInt(parts[1], 10);
+  return PAYMENTS_MONTH_NAMES[m] + ' ' + parts[0];
+}

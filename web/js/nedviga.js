@@ -20,7 +20,9 @@ function isExtraIncomeReceived() {
 window.isExtraIncomeReceived = isExtraIncomeReceived;
 
 
-var NEDVIGA_API = 'http://176.124.208.212:8765/api/nedviga/snapshot';
+var NEDVIGA_API_BASE = 'http://176.124.208.212:8765';
+var NEDVIGA_API = NEDVIGA_API_BASE + '/api/nedviga/snapshot';
+var NEDVIGA_API_MARK = NEDVIGA_API_BASE + '/api/nedviga/mark';
 var NEDVIGA_TOKEN = 'Uob08yTpSBKLhAVAl-KHYaUtWU4mFIlFGyLKZL5b0RY';
 var NEDVIGA_CACHE_KEY = 'dresscode_nedviga_v1';
 var NEDVIGA_CACHE_TTL = 5 * 60 * 1000;
@@ -103,6 +105,58 @@ function loadNedviga(force) {
 
 function renderNedvigaIfLoaded() {
   if (nedvigaData) renderNedviga();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WRITE — POST /api/nedviga/mark (FIX-031)
+// ═══════════════════════════════════════════════════════════════
+function nedvigaMark(address, kind, marked) {
+  if (nedvigaIsDemo) {
+    // В demo-режиме API ещё не задеплоен — просто обновляем UI локально
+    nedvigaApplyMark(address, kind, marked);
+    return;
+  }
+  // Optimistic update
+  nedvigaApplyMark(address, kind, marked);
+
+  fetch(NEDVIGA_API_MARK, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + NEDVIGA_TOKEN
+    },
+    body: JSON.stringify({ address: address, kind: kind, marked: marked })
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(res) {
+      if (!res.ok) throw new Error(res.error || 'mark_failed');
+      // Успех — кэш уже обновлён через nedvigaApplyMark.
+    })
+    .catch(function(err) {
+      console.warn('nedviga mark failed:', err);
+      // Откат: возвращаем как было
+      nedvigaApplyMark(address, kind, !marked);
+      if (typeof toast === 'function') toast('Не удалось сохранить отметку');
+    });
+}
+
+function nedvigaApplyMark(address, kind, marked) {
+  if (!nedvigaData || !nedvigaData.objects) return;
+  for (var i = 0; i < nedvigaData.objects.length; i++) {
+    var o = nedvigaData.objects[i];
+    if (o.address === address && o[kind]) {
+      o[kind].marked = !!marked;
+      o[kind].at = marked ? new Date().toISOString() : null;
+      try {
+        localStorage.setItem(NEDVIGA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: nedvigaData, demo: nedvigaIsDemo }));
+      } catch(e) {}
+      renderNedviga();
+      return;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -315,7 +369,9 @@ function renderNedvigaPayRow(o, todayD) {
     : '';
   var ukBadge = o.via_uk ? '<span class="ndv-badge ndv-badge-uk">через УК</span>' : '';
 
-  var html = '<div class="ndv-row ndv-row-' + statusCls + '">';
+  var safeAddr = escapeHtml(o.address).replace(/'/g, "\\'");
+  var onclick = 'onclick="nedvigaMark(\'' + safeAddr + '\',\'payment\',' + (paid ? 'false' : 'true') + ')"';
+  var html = '<div class="ndv-row ndv-row-' + statusCls + ' ndv-row-clickable" ' + onclick + '>';
   html +=   '<div class="ndv-row-status">' + icon + '</div>';
   html +=   '<div class="ndv-row-main">';
   html +=     '<div class="ndv-row-addr">' + escapeHtml(o.address) + ' ' + overrideBadge + ukBadge + '</div>';
@@ -377,11 +433,14 @@ function renderNedvigaUtility() {
     else if (todayD > 25 && !sub) rowCls = 'ndv-ku-overdue';
 
     var ukBadge = o.via_uk ? '<span class="ndv-badge ndv-badge-uk">через УК</span>' : '';
+    var safeAddr = escapeHtml(o.address).replace(/'/g, "\\'");
+    var colClick = 'onclick="nedvigaMark(\'' + safeAddr + '\',\'reading_collected\',' + (col ? 'false' : 'true') + ')"';
+    var subClick = 'onclick="nedvigaMark(\'' + safeAddr + '\',\'reading_submitted\',' + (sub ? 'false' : 'true') + ')"';
     html += '<div class="ndv-ku-row ' + rowCls + '">';
     html +=   '<div class="ndv-ku-num">' + (sub ? '✅' : (col ? '📋' : '○')) + '</div>';
     html +=   '<div class="ndv-row-main"><div class="ndv-row-addr">' + escapeHtml(o.address) + ' ' + ukBadge + '</div></div>';
-    html +=   '<div class="ndv-ku-cell">' + (col ? '☑' : '☐') + '</div>';
-    html +=   '<div class="ndv-ku-cell">' + (sub ? '☑' : '☐') + '</div>';
+    html +=   '<div class="ndv-ku-cell ndv-ku-cell-clickable" ' + colClick + '>' + (col ? '☑' : '☐') + '</div>';
+    html +=   '<div class="ndv-ku-cell ndv-ku-cell-clickable" ' + subClick + '>' + (sub ? '☑' : '☐') + '</div>';
     html += '</div>';
   });
   html += '</div>';
