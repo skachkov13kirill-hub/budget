@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css?v=29">
+<link rel="stylesheet" href="css/app.css?v=30">
 <title>DressCode · Дашборд</title>
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var CLEAN_KEY='dc_cleaned_v27';
+  var CLEAN_KEY='dc_cleaned_v30';
   if(localStorage.getItem(CLEAN_KEY)) return;
   var needsClean=false;
   if('serviceWorker' in navigator){
@@ -50,14 +50,8 @@
   <button class="nav-btn" onclick="switchTab('daily',this)" id="nav-daily">
     <span class="nav-icon">&#x1F4C5;</span>Дни
   </button>
-  <button class="nav-btn" onclick="switchTab('payments',this)" id="nav-payments">
-    <span class="nav-icon">&#x1F4B3;</span>Платежи
-  </button>
-  <button class="nav-btn" onclick="switchTab('tasks',this)" id="nav-tasks">
-    <span class="nav-icon">&#x2705;</span>Задачи
-  </button>
-  <button class="nav-btn" onclick="switchTab('agents',this)" id="nav-agents">
-    <span class="nav-icon">&#x1F916;</span>Агенты
+  <button class="nav-btn" onclick="switchTab('nedviga',this);if(typeof loadNedviga==='function')loadNedviga();" id="nav-nedviga">
+    <span class="nav-icon">&#x1F3E0;</span>Недвига
   </button>
 </nav>
 
@@ -124,122 +118,19 @@
   <div id="dailyChartError" style="display:none;"></div>
 </div>
 
-<!-- TAB: ПЛАТЕЖИ -->
-<div class="main-tab" id="tab-payments">
-  <div class="payments-header">
-    <span>&#x1F4B3; Платежи &mdash; <span id="paymentsMonthName">март</span></span>
-  </div>
-  <div class="payments-summary" id="paymentsSummary"></div>
-  <div id="paymentsContent">
-    <div class="loading-box"><div class="spinner"></div></div>
-  </div>
-</div>
-
-<!-- TAB: АГЕНТЫ -->
-<div class="main-tab" id="tab-agents">
-  <div class="payments-header">
-    <span>&#x1F916; Агенты</span>
-  </div>
-  <div id="agentsContent">
-    <div class="loading-box"><div class="spinner"></div></div>
-  </div>
-</div>
-
-<!-- TAB: ЗАДАЧИ -->
-<div class="main-tab" id="tab-tasks">
-  <div class="tasks-header">
-    <div class="tasks-view-toggle">
-      <button class="tasks-view-btn active" id="btnViewCal" onclick="tasksSetView('calendar')">Календарь</button>
-      <button class="tasks-view-btn" id="btnViewTree" onclick="tasksSetView('tree')">Доска</button>
-      <button class="tasks-view-btn" id="btnViewBranch" onclick="tasksSetView('branch')">Ателье</button>
-    </div>
-    <div class="tasks-week-nav">
-      <button class="tasks-week-arrow" onclick="tasksChangeWeek(-1)">&larr;</button>
-      <span class="tasks-week-label" id="tasksWeekLabel"></span>
-      <button class="tasks-week-arrow" onclick="tasksChangeWeek(1)">&rarr;</button>
-    </div>
-  </div>
-  <div class="tasks-stats" id="tasksStats"></div>
-
-  <!-- CALENDAR VIEW -->
-  <div class="tasks-panel active" id="tasksPanelCal">
-    <div class="tasks-day-tabs" id="tasksDayTabs"></div>
-    <div class="tasks-day-content" id="tasksDayContent"></div>
-    <button class="tasks-add-slot-btn" onclick="tasksOpenAddSlot()">+ Добавить задачу</button>
-  </div>
-
-  <!-- TREE VIEW -->
-  <div class="tasks-panel" id="tasksPanelTree">
-    <div id="tasksTreeView"></div>
-    <button class="tasks-add-root-btn" onclick="tasksOpenAddNode(null)">+ Новый блок</button>
-  </div>
-
-  <!-- BRANCH NOTEPAD VIEW -->
-  <div class="tasks-panel" id="tasksPanelBranch">
-    <div id="tasksBranchView"></div>
-  </div>
-</div>
-
-<!-- TASK MODALS -->
-<div class="tasks-modal-bg" id="tasksAddSlotModal" onclick="if(event.target===this)tasksCloseModal('tasksAddSlotModal')">
-  <div class="tasks-modal">
-    <div class="tasks-modal-title">Добавить задачу</div>
-    <label class="tasks-modal-label">Название</label>
-    <input type="text" class="tasks-modal-input" id="tasksSlotName" placeholder="Что нужно сделать..." />
-    <label class="tasks-modal-label">Категория</label>
-    <select class="tasks-modal-input" id="tasksSlotCategory">
-      <option value="">— без категории —</option>
-      <option value="КБ">КБ</option>
-      <option value="Мои дела">Мои дела</option>
-      <option value="Семья">Семья</option>
-      <option value="Планирование">Планирование</option>
-    </select>
-    <label class="tasks-modal-label">Время</label>
-    <div style="display:flex;gap:8px;">
-      <input type="time" class="tasks-modal-input" id="tasksSlotStart" value="10:00" />
-      <input type="time" class="tasks-modal-input" id="tasksSlotEnd" value="11:00" />
-    </div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksAddSlotModal')">Отмена</button>
-      <button class="tasks-modal-save" onclick="tasksSaveSlot()">Добавить</button>
-    </div>
-  </div>
-</div>
-
-<div class="tasks-modal-bg" id="tasksAddNodeModal" onclick="if(event.target===this)tasksCloseModal('tasksAddNodeModal')">
-  <div class="tasks-modal">
-    <div class="tasks-modal-title" id="tasksAddNodeTitle">Добавить</div>
-    <label class="tasks-modal-label">Название</label>
-    <input type="text" class="tasks-modal-input" id="tasksNodeName" placeholder="Введите название..." />
-    <label class="tasks-modal-label">Цвет</label>
-    <div class="tasks-color-picker" id="tasksColorPicker"></div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksAddNodeModal')">Отмена</button>
-      <button class="tasks-modal-save" onclick="tasksSaveNode()">Добавить</button>
-    </div>
-  </div>
-</div>
-
-<!-- BRANCH TASK MODAL -->
-<div class="tasks-modal-bg" id="tasksBranchAddModal" onclick="if(event.target===this)tasksCloseModal('tasksBranchAddModal')">
-  <div class="tasks-modal">
-    <div class="tasks-modal-title" id="tasksBranchAddTitle">Добавить задачу</div>
-    <input type="text" class="tasks-modal-input" id="tasksBranchTaskText" placeholder="Что нужно сделать..." />
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="tasks-modal-cancel" onclick="tasksCloseModal('tasksBranchAddModal')">Отмена</button>
-      <button class="tasks-modal-save" onclick="tasksBranchSaveTask()">Добавить</button>
-    </div>
+<!-- TAB: НЕДВИГА -->
+<div class="main-tab" id="tab-nedviga">
+  <div id="nedvigaContent">
+    <div class="loading-box"><div class="spinner"></div><p>Загрузка портфеля...</p></div>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="js/app.js?v=32"></script>
+<script src="js/app.js?v=33"></script>
 <script src="js/weather.js?v=29"></script>
-<script src="js/payments.js?v=29"></script>
-<script src="js/agents.js?v=29"></script>
-<script src="js/tasks.js?v=29"></script>
 <script src="js/business.js?v=29"></script>
 <script src="js/daily.js?v=29"></script>
+<script src="js/nedviga.js?v=1"></script>
 </body>
 </html>

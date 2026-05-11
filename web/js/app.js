@@ -123,8 +123,7 @@ function renderAll() {
     if (typeof renderBizOverview === 'function') renderBizOverview(state.branches);
     if (typeof renderFilials === 'function') renderFilials(state.branches);
   }
-  if (typeof renderPaymentsTab === 'function') renderPaymentsTab();
-  if (typeof renderAgentsTab === 'function') renderAgentsTab();
+  if (typeof renderNedvigaIfLoaded === 'function') renderNedvigaIfLoaded();
 
   // Disable future months in biz selector
   if (typeof bizEnforceDateLimits === 'function') bizEnforceDateLimits();
@@ -201,7 +200,6 @@ function applyBranchData(data, month) {
   document.getElementById('bizError').style.display = 'none';
   if (typeof renderBizOverview === 'function') renderBizOverview(data);
   if (typeof renderFilials === 'function') renderFilials(data);
-  if (typeof renderPaymentsTab === 'function') renderPaymentsTab();
   // Save daily snapshot
   if (!bizIsHistorical) {
     var ySel = document.getElementById('bizYearSelect');
