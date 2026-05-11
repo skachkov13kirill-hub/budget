@@ -9,7 +9,7 @@
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var CLEAN_KEY='dc_cleaned_v31';
+  var CLEAN_KEY='dc_cleaned_v32';
   if(localStorage.getItem(CLEAN_KEY)) return;
   var needsClean=false;
   if('serviceWorker' in navigator){
@@ -141,7 +141,7 @@
 <script src="js/weather.js?v=29"></script>
 <script src="js/business.js?v=29"></script>
 <script src="js/daily.js?v=29"></script>
-<script src="js/nedviga.js?v=2"></script>
-<script src="js/payments.js?v=2"></script>
+<script src="js/nedviga.js?v=3"></script>
+<script src="js/payments.js?v=3"></script>
 </body>
 </html>

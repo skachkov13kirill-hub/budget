@@ -20,7 +20,7 @@ function isExtraIncomeReceived() {
 window.isExtraIncomeReceived = isExtraIncomeReceived;
 
 
-var NEDVIGA_API_BASE = 'http://176.124.208.212:8765';
+var NEDVIGA_API_BASE = 'https://kirill-bogatyrev.duckdns.org/dresscode-api';
 var NEDVIGA_API = NEDVIGA_API_BASE + '/api/nedviga/snapshot';
 var NEDVIGA_API_MARK = NEDVIGA_API_BASE + '/api/nedviga/mark';
 var NEDVIGA_TOKEN = 'Uob08yTpSBKLhAVAl-KHYaUtWU4mFIlFGyLKZL5b0RY';

@@ -6,7 +6,7 @@
 //   POST /api/atelie/mark   {section, id, marked}
 // ═══════════════════════════════════════════════════════════════
 
-var PAYMENTS_API_BASE = 'http://176.124.208.212:8765';
+var PAYMENTS_API_BASE = 'https://kirill-bogatyrev.duckdns.org/dresscode-api';
 var PAYMENTS_API_SNAPSHOT = PAYMENTS_API_BASE + '/api/atelie/snapshot';
 var PAYMENTS_API_MARK = PAYMENTS_API_BASE + '/api/atelie/mark';
 var PAYMENTS_TOKEN = (typeof NEDVIGA_TOKEN !== 'undefined') ? NEDVIGA_TOKEN : '';
