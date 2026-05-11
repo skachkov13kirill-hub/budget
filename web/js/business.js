@@ -886,7 +886,7 @@ function renderFilials(data) {
       '<div class="filial-rank" style="background:' + rankColor + ';">#' + (i + 1) + '</div></div></div>' +
       '<div class="filial-row"><span>Ателье:</span><span>' + fmt(f.fact.atelie) + '</span></div>' +
       '<div style="font-size:10px;color:var(--text-3);margin-bottom:6px;">План: ' + fmt(f.plan.atelie) + ' (' + f.performance.atelie + '%)</div>' +
-      '<div class="filial-row"><span>Ср. чек:</span><span>' + fmt(f.fact.himchistka) + '</span></div>' +
+      '<div class="filial-row"><span>Химчистка:</span><span>' + fmt(f.fact.himchistka) + '</span></div>' +
       '<div style="font-size:10px;color:var(--text-3);margin-bottom:6px;">План: ' + fmt(f.plan.himchistka) + ' (' + f.performance.himchistka + '%)</div>' +
       '<div class="filial-row"><span><strong>ИТОГО:</strong></span><span><strong>' + fmt(f.fact.total) + '</strong></span></div>' +
       '<div class="filial-perf ' + perfClass + '">' + perf + '% от плана</div>' +

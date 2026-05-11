@@ -54,3 +54,7 @@ bot.log*
 # ========================================
 bot_v9/_old/
 scripts/_old_*
+
+# Локальная инфраструктура (Claude Code preview, бэкапы с VPS)
+.claude/
+bot_v9/_vps_backup/

@@ -13,6 +13,7 @@ Requires:
   pip install openai anthropic
 """
 
+import datetime
 import traceback
 
 from telegram import Update
@@ -30,6 +31,7 @@ from handlers import (
     register_cmd, unregister_cmd, branches_cmd,
     callback_handler, handle_voice, handle_message
 )
+from nightly_audit import run_nightly_audit
 
 
 def main():
@@ -102,6 +104,21 @@ def main():
         print("   ANTHROPIC_API_KEY — console.anthropic.com")
     print("\nОткрой бота и напиши /start")
     print("Ctrl+C для остановки\n")
+
+    # ── Ночной аудит: ОТКЛЮЧЁН 11.05.2026 по решению Кирилла ──
+    # Шумел в личке, заглушал нужные уведомления о приходе отчётов от филиалов.
+    # Если понадобится вернуть — раскомментировать блок ниже.
+    # try:
+    #     import pytz
+    #     msk = pytz.timezone('Europe/Moscow')
+    # except ImportError:
+    #     import zoneinfo
+    #     msk = zoneinfo.ZoneInfo('Europe/Moscow')
+    #
+    # audit_time = datetime.time(hour=3, minute=0, tzinfo=msk)
+    # app.job_queue.run_daily(run_nightly_audit, time=audit_time, name='nightly_audit')
+    # logger.info(f"🔍 Ночной аудит запланирован на 03:00 МСК")
+    logger.info("🔇 Ночной аудит отключён (см. комментарий выше)")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
