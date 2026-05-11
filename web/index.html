@@ -9,7 +9,7 @@
 <script>
 // Nuclear cache cleanup: kill ALL service workers and ALL caches, then reload
 (function(){
-  var CLEAN_KEY='dc_cleaned_v30';
+  var CLEAN_KEY='dc_cleaned_v31';
   if(localStorage.getItem(CLEAN_KEY)) return;
   var needsClean=false;
   if('serviceWorker' in navigator){
