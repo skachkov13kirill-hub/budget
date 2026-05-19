@@ -59,30 +59,57 @@ function renderBizOverview(data) {
       : 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
   }
 
-  // ── Химчистка (одно поле) ──
-  document.getElementById('ov-himch-fact').textContent = fmt(himchFact);
-  var himchPlan = (t.plan && t.plan.himchistka) ? t.plan.himchistka : 0;
-  var himchSharePct = totalOborot > 0 ? Math.round(himchFact / totalOborot * 100) : 0;
-  if (himchPlan > 0) {
-    var planHimchToday = Math.round(himchPlan * dayRatio);
-    var pctHimch = planHimchToday > 0 ? Math.round(himchFact / planHimchToday * 100) : 0;
-    var himchStatus = pctHimch >= 100 ? '\u2705' : pctHimch >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
-    document.getElementById('ov-himch-sub').textContent = isCurrentMonth
-      ? himchStatus + ' ' + himchSharePct + '% об. \u00b7 план ' + fmtShort(planHimchToday) + ' (' + pctHimch + '%)'
-      : himchSharePct + '% об. \u00b7 План: ' + fmtShort(himchPlan) + ' (' + (t.performance.himchistka || 0) + '%)';
+  // ── Дельта плана (карточка 3) ──
+  var planTotalForDelta = (t.plan && t.plan.total) ? t.plan.total : 0;
+  var planRefToday = isCurrentMonth ? Math.round(planTotalForDelta * dayRatio) : planTotalForDelta;
+  var planDelta = totalOborot - planRefToday;
+  var deltaEl = document.getElementById('ov-himch-fact');
+  var deltaSubEl = document.getElementById('ov-himch-sub');
+  if (planTotalForDelta > 0) {
+    var deltaSign = planDelta >= 0 ? '+' : '−';
+    deltaEl.textContent = deltaSign + fmtShort(Math.abs(planDelta));
+    deltaEl.style.color = planDelta >= 0 ? '#22C55E' : '#EF4444';
+    var daysLeftMonth = isCurrentMonth ? Math.max(0, daysInMonth - daysWithData) : 0;
+    if (isCurrentMonth) {
+      if (planDelta >= 0) {
+        deltaSubEl.textContent = '✅ опережение к плану ' + daysWithData + 'д';
+      } else if (daysLeftMonth > 0) {
+        var needPerDay = Math.round(Math.abs(planDelta) / daysLeftMonth);
+        deltaSubEl.textContent = '⚠️ нужно ' + fmtShort(needPerDay) + '/день · ' + daysLeftMonth + 'д';
+      } else {
+        deltaSubEl.textContent = 'отставание';
+      }
+    } else {
+      deltaSubEl.textContent = (planDelta >= 0 ? '✅ ' : '🔴 ') + deltaSign + fmtShort(Math.abs(planDelta)) + ' к плану';
+    }
   } else {
-    document.getElementById('ov-himch-sub').textContent = himchSharePct + '% оборота';
+    deltaEl.textContent = '—';
+    deltaEl.style.color = '';
+    deltaSubEl.textContent = 'нет плана';
   }
 
-  // ── Клиенты · Чек ──
-  var avgCheck = t.fact.avgCheck || 0;
-  var clients = t.fact.clients || 0;
-  document.getElementById('ov-clients-check').textContent = clients + ' кл \u00b7 ' + fmt(avgCheck);
-  var avgCheckPlan = (t.plan && t.plan.clients > 0 && t.plan.atelie > 0) ? Math.round(t.plan.atelie / t.plan.clients) : 0;
-  if (avgCheckPlan > 0) {
-    document.getElementById('ov-clients-check-sub').textContent = 'план чека: ' + fmt(avgCheckPlan);
+  // ── vs 2025 + Топ/Худший филиал (карточка 4) ──
+  var pyTotal = (t.prevYear && t.prevYear.total) || 0;
+  var vsEl = document.getElementById('ov-clients-check');
+  var vsSubEl = document.getElementById('ov-clients-check-sub');
+  if (pyTotal > 0) {
+    var pct25 = Math.round(totalOborot / pyTotal * 100);
+    var diff25 = pct25 - 100;
+    vsEl.textContent = (diff25 >= 0 ? '+' : '−') + Math.abs(diff25) + '%';
+    vsEl.style.color = diff25 >= 0 ? '#22C55E' : '#EF4444';
   } else {
-    document.getElementById('ov-clients-check-sub').textContent = '';
+    vsEl.textContent = '—';
+    vsEl.style.color = '';
+  }
+  var rankedByPerf = (data.filials || []).filter(function(f) { return f.plan && f.plan.total > 0; })
+    .sort(function(a, b) { return (b.performance.total || 0) - (a.performance.total || 0); });
+  if (rankedByPerf.length >= 2) {
+    var topF = rankedByPerf[0], worstF = rankedByPerf[rankedByPerf.length - 1];
+    vsSubEl.textContent = '↑' + topF.code + ' ' + (topF.performance.total || 0) + '% · ↓' + worstF.code + ' ' + (worstF.performance.total || 0) + '%';
+  } else if (pyTotal > 0) {
+    vsSubEl.textContent = '2025: ' + fmtShort(pyTotal);
+  } else {
+    vsSubEl.textContent = 'нет данных 2025';
   }
 
   // Прогресс-бар: по плану на текущий день
@@ -1194,7 +1221,8 @@ function openNetworkDetail(metricKey) {
     clients:     { title: '\uD83D\uDC65 Клиенты \u2014 сеть', color: '#E17055' },
     himchistka:  { title: '\uD83E\uDDF9 Химчистка \u2014 сеть', color: '#00CEC9' },
     profit:      { title: '\uD83D\uDCC8 Эффективность \u2014 сеть', color: '#FDCB6E' },
-    forecast:    { title: '\uD83D\uDD2E Прогноз \u2014 сеть', color: '#A29BFE' }
+    forecast:    { title: '\uD83D\uDD2E Прогноз \u2014 сеть', color: '#A29BFE' },
+    vs2025:      { title: '\uD83C\uDD9A vs 2025 \u2014 сеть', color: '#FF8800' }
   };
   var cfg = METRIC[metricKey]; if (!cfg) return;
 
@@ -1237,6 +1265,11 @@ function openNetworkDetail(metricKey) {
       r.fact = f.fact.himchistka || 0;
       r.plan = f.plan.himchistka || 0;
       r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+    } else if (metricKey === 'vs2025') {
+      r.fact = f.fact.total || 0;
+      r.plan = (f.prevYear && f.prevYear.total) || 0;
+      r.pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : 0;
+      r.delta = r.fact - r.plan;
     } else if (metricKey === 'atelie') {
       r.fact = f.fact.atelie || 0;
       r.plan = f.plan.atelie || 0;
@@ -1373,6 +1406,24 @@ function openNetworkDetail(metricKey) {
         extra + '</div>';
     });
 
+  } else if (metricKey === 'vs2025') {
+    rows.forEach(function(r) {
+      var barW = maxFact > 0 ? Math.round(r.fact / maxFact * 100) : 0;
+      var zc = r.plan > 0 ? (r.pct >= 100 ? '#22C55E' : r.pct >= 90 ? '#FFAA00' : '#FF4D4D') : '#888';
+      var deltaStr = r.plan > 0
+        ? (r.delta >= 0 ? '+' : '\u2212') + fmtShort(Math.abs(r.delta))
+        : '\u2014';
+      rowsHtml += '<div style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+          '<span style="font-size:13px;font-weight:600;">' + r.name + '</span>' +
+          '<span style="font-size:14px;font-weight:800;">' + fmtShort(r.fact) + '</span></div>' +
+        '<div style="background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;margin-bottom:3px;">' +
+          '<div style="height:100%;width:' + barW + '%;background:' + cfg.color + ';border-radius:6px;"></div></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">' +
+          '<span>2025: ' + (r.plan > 0 ? fmtShort(r.plan) : '\u2014') + ' \u00b7 ' + deltaStr + '</span>' +
+          '<span style="color:' + zc + ';font-weight:700;">' + (r.plan > 0 ? r.pct + '%' : '') + '</span></div></div>';
+    });
+
   } else {
     // atelie, total — with forecast + shortfall
     rows.forEach(function(r) {
@@ -1424,6 +1475,17 @@ function openNetworkDetail(metricKey) {
       '<div><div style="font-size:10px;opacity:0.8;">\u041F\u041B\u0410\u041D</div><div style="font-size:20px;font-weight:800;">' + totalPlan + '</div></div>' +
       '<div><div style="font-size:10px;opacity:0.8;">\u041F\u0420\u041E\u0413\u041D\u041E\u0417</div><div style="font-size:20px;font-weight:800;">' + tForecast + '</div></div>' +
       (tDailyNeed > 0 ? '<div><div style="font-size:10px;opacity:0.8;">\u041D\u0423\u0416\u041D\u041E/\u0414\u0415\u041D\u042C</div><div style="font-size:20px;font-weight:800;color:#FFD700;">' + tDailyNeed + '</div></div>' : '') + '</div>';
+  } else if (metricKey === 'vs2025') {
+    var tDelta = totalFact - totalPlan;
+    var tDeltaStr = totalPlan > 0
+      ? (tDelta >= 0 ? '+' : '\u2212') + fmtShort(Math.abs(tDelta))
+      : '\u2014';
+    var diffPct = totalPlan > 0 ? totalPct - 100 : 0;
+    headerSub = totalPlan > 0 ? ((diffPct >= 0 ? '+' : '\u2212') + Math.abs(diffPct) + '% \u043A 2025') : '\u043D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 2025';
+    headerVals = '<div style="display:flex;gap:16px;margin-top:12px;">' +
+      '<div><div style="font-size:10px;opacity:0.8;">2026</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalFact) + '</div></div>' +
+      '<div><div style="font-size:10px;opacity:0.8;">2025</div><div style="font-size:22px;font-weight:800;">' + (totalPlan > 0 ? fmtShort(totalPlan) : '\u2014') + '</div></div>' +
+      (totalPlan > 0 ? '<div><div style="font-size:10px;opacity:0.8;">\u0414\u0415\u041B\u042C\u0422\u0410</div><div style="font-size:22px;font-weight:800;">' + tDeltaStr + '</div></div>' : '') + '</div>';
   } else {
     headerVals = '<div style="display:flex;gap:16px;margin-top:12px;">' +
       '<div><div style="font-size:10px;opacity:0.8;">\u0424\u0410\u041A\u0422</div><div style="font-size:22px;font-weight:800;">' + fmtShort(totalFact) + '</div></div>' +
