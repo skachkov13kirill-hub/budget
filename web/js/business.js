@@ -23,7 +23,30 @@ function renderBizOverview(data) {
   var isCurrentMonth = (now.getMonth() + 1) === month && now.getFullYear() === year;
   var daysInMonth = new Date(year, month, 0).getDate();
   var daysWithData = isCurrentMonth ? Math.max(1, now.getDate() - 1) : daysInMonth;
-  var dayRatio = daysWithData / daysInMonth; // доля месяца с данными
+  // effectiveDays = последний день, реально закрытый по факту (>=60% филиалов сдали).
+  // Решает проблему: до 20:00 вчерашние отчёты ещё приходят, факт пока за позавчера, а план уже за вчера.
+  var effectiveDays = daysWithData;
+  if (isCurrentMonth && state && state.dailyChart && state.dailyChart.days) {
+    var monthDays = state.dailyChart.days.filter(function(d) {
+      var mm = parseInt((d.date || '').split('.')[1]);
+      return mm === month;
+    });
+    monthDays.sort(function(a, b) {
+      return parseInt(a.date.split('.')[0]) - parseInt(b.date.split('.')[0]);
+    });
+    for (var di = monthDays.length - 1; di >= 0; di--) {
+      var dd = monthDays[di];
+      var brs = dd.branches || [];
+      var withDataCount = 0;
+      for (var bi = 0; bi < brs.length; bi++) { if ((brs[bi].atelie || 0) > 0) withDataCount++; }
+      var totalBr = brs.length || 10;
+      if (totalBr > 0 && withDataCount / totalBr >= 0.8) {
+        effectiveDays = parseInt(dd.date.split('.')[0]);
+        break;
+      }
+    }
+  }
+  var dayRatio = effectiveDays / daysInMonth; // доля месяца с фактически закрытыми данными
 
   // Химчистка — суммируем из филиалов (надёжнее чем totals)
   var himchFact = 0;
@@ -42,7 +65,7 @@ function renderBizOverview(data) {
     var pctOborot = planTotalToday > 0 ? Math.round(totalOborot / planTotalToday * 100) : 0;
     var oborotStatus = pctOborot >= 100 ? '\u2705' : pctOborot >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
     document.getElementById('ov-oborot-plan').textContent = isCurrentMonth
-      ? oborotStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planTotalToday) + ' (' + pctOborot + '%)'
+      ? oborotStatus + ' план ' + effectiveDays + 'д: ' + fmtShort(planTotalToday) + ' (' + pctOborot + '%)'
       : 'План: ' + fmtShort(planTotal) + ' (' + (t.performance.total || 0) + '%)';
   } else {
     document.getElementById('ov-oborot-plan').textContent = '';
@@ -55,7 +78,7 @@ function renderBizOverview(data) {
     var pctAtelieToday = planAtelieToday > 0 ? Math.round(t.fact.atelie / planAtelieToday * 100) : 0;
     var atelieStatus = pctAtelieToday >= 100 ? '\u2705' : pctAtelieToday >= 90 ? '\uD83D\uDFE1' : '\uD83D\uDD34';
     document.getElementById('ov-atelie-plan').textContent = isCurrentMonth
-      ? atelieStatus + ' план ' + daysWithData + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
+      ? atelieStatus + ' план ' + effectiveDays + 'д: ' + fmtShort(planAtelieToday) + ' (' + pctAtelieToday + '%)'
       : 'План: ' + fmtShort(t.plan.atelie) + ' (' + t.performance.atelie + '%)';
   }
 
@@ -69,10 +92,10 @@ function renderBizOverview(data) {
     var deltaSign = planDelta >= 0 ? '+' : '−';
     deltaEl.textContent = deltaSign + fmtShort(Math.abs(planDelta));
     deltaEl.style.color = planDelta >= 0 ? '#22C55E' : '#EF4444';
-    var daysLeftMonth = isCurrentMonth ? Math.max(0, daysInMonth - daysWithData) : 0;
+    var daysLeftMonth = isCurrentMonth ? Math.max(0, daysInMonth - effectiveDays) : 0;
     if (isCurrentMonth) {
       if (planDelta >= 0) {
-        deltaSubEl.textContent = '✅ опережение к плану ' + daysWithData + 'д';
+        deltaSubEl.textContent = '✅ опережение к плану ' + effectiveDays + 'д';
       } else if (daysLeftMonth > 0) {
         var needPerDay = Math.round(Math.abs(planDelta) / daysLeftMonth);
         deltaSubEl.textContent = '⚠️ нужно ' + fmtShort(needPerDay) + '/день · ' + daysLeftMonth + 'д';
