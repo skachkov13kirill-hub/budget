@@ -9,7 +9,9 @@ const ATELIE_SPREADSHEET_ID = '1cRdejpUv8gRyNTQVJPw16pp44FqmX6CZUSdUkWcUa40';  /
 const FAMILY_SPREADSHEET_ID = '13ZsaVLG_GJMWGvzOOyg17H8pss-eQGhu1X8yZ9nAVVg';  // Таблица семейного бюджета
 
 // ─── TELEGRAM УВЕДОМЛЕНИЯ ───
-const TG_BOT_TOKEN = '8013929400:AAHpjk1xy2WH1VHT9LwLxd3a5fMR3S4-aC0';
+// Токен НЕ хранится в коде. Лежит в Script Properties (Настройки проекта → Свойства скрипта),
+// ключ 'TG_BOT_TOKEN'. Ротация 2026-06-25 после утечки в публичном репозитории.
+const TG_BOT_TOKEN = PropertiesService.getScriptProperties().getProperty('TG_BOT_TOKEN');
 const TG_CHAT_ID = '470830950';
 const BRANCH_FULL_NAMES = {
   'М16': 'Менделеева 16', 'В8': 'Воронцовский 8', 'П14': 'Петровский 14',
