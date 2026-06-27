@@ -68,6 +68,22 @@ function fetchWithTimeout(url, timeout, options) {
   });
 }
 
+/* FIX-040: getBranches сначала из локального data.json (надёжно), шлюз — запасной */
+(function(){
+  var _origFWT = fetchWithTimeout;
+  fetchWithTimeout = function(url, timeout, options){
+    try {
+      if (typeof url === 'string' && url.indexOf('action=getBranches') >= 0) {
+        return _origFWT('data.json?_t=' + Date.now(), 4000).then(function(r){
+          if (r && r.ok) return r;
+          return _origFWT(url, timeout, options);
+        }).catch(function(){ return _origFWT(url, timeout, options); });
+      }
+    } catch (e) {}
+    return _origFWT(url, timeout, options);
+  };
+})();
+
 // ═══════════════════════════════════════════════════════════════
 // DATA LOADING
 // ═══════════════════════════════════════════════════════════════
